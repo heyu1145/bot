@@ -1,15 +1,48 @@
-# Python Discord Bot
+# Discord Event Manager Bot
 
-This is a starting point for making your own Discord bot using Python and the [discordpy](https://discordpy.readthedocs.io/) library.
-Read [their getting-started guides](https://discordpy.readthedocs.io/en/stable/#getting-started) to get the most out of this template.
+A Discord bot that allows server members to create, delete, and list events using slash commands.
 
-## Getting Started
+## Setup Instructions (Replit)
 
-To get set up, you'll need to follow [these bot account setup instructions](https://discordpy.readthedocs.io/en/stable/discord.html),
-and then copy the token for your bot and added it as a secret with the key of `TOKEN` in the "Secrets (Environment variables)" panel.
+1. **Create a new Replit project** with Python template
+2. **Create these files**:
+   - main.py (main bot code)
+   - keep_alive.py (to keep the bot running)
+   - .env (for your Discord token)
 
-## FAQ
+3. **Install required packages** in Replit's shell:
+   ```
+   pip install discord.py python-dotenv pytz flask
+   ```
 
-If you get the following error message while trying to start the server: `429 Too Many Requests` (accompanied by a lot of HTML code), 
-try the advice given in this Stackoverflow question:
-https://stackoverflow.com/questions/66724687/in-discord-py-how-to-solve-the-error-for-toomanyrequests
+4. **Set up your .env file**:
+   ```
+   DISCORD_TOKEN=your_actual_discord_bot_token_here
+   ```
+
+5. **Create a Discord Bot** in the [Discord Developer Portal](https://discord.com/developers/applications):
+   - Go to the Applications page
+   - Create a new application
+   - Go to the "Bot" tab and click "Add Bot"
+   - Copy the bot token and paste it in .env
+   - Enable the "Server Members" intent in the bot settings
+
+6. **Invite the bot to your server** with these permissions:
+   - Manage Events
+   - Send Messages
+   - Use Slash Commands
+
+7. **Run the bot** by clicking the "Run" button in Replit
+
+## Available Commands
+
+- `/create_event` - Create a new event with name, description, time, and location
+- `/delete_event` - Delete an event using its ID
+- `/list_events` - Show all upcoming events with their IDs
+
+## Notes
+
+- The bot uses UTC timezone by default. You can change this in main.py
+- The keep_alive.py file creates a web server to keep your bot running on Replit
+- For 24/7 uptime, you can use a service like UptimeRobot to ping your Replit web server
+   
