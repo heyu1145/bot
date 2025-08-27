@@ -5,7 +5,7 @@ python-dotenv==1.1.1
 aiohttp==3.9.0
 async-timeout==4.0.3
 attrs==23.2.0
-blinker==1.7.0
+blinker==1.9.0
 click==8.1.7
 idna==3.6
 itsdangerous==2.1.2
