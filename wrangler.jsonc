@@ -3,5 +3,4 @@
   "compatibility_date": "2025-08-27",
   "main": "main.py",
   "compatibility_flags": ["python_workers"],
-  "requirements": "requirements.txt"  // Changed from "python_requirements"
 }
