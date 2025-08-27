@@ -1,1 +1,6 @@
-poetry export -f requirements.txt --output requirements.txt --without-hashes
+python=="^3.10"
+discord=="^2.3.2"
+discord-py=="^2.6.2"
+pytz=="^2025.2"
+flask=="^3.1.2"
+python-dotenv=="^1.1.1"
