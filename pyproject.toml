@@ -6,18 +6,16 @@ authors = ["Your Name <you@example.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-discord.py = "^2.5.0"  # Use main library instead of mirror
+discord.py = "^2.5.0"  # Use ONLY this one - remove the 'discord' dependency
 flask = "^3.0.0"
 pytz = "^2024.1"
 python-dotenv = "^1.0.0"
 aiohttp = "^3.9.0"
 
 [tool.pyright]
-# https://github.com/microsoft/pyright/blob/main/docs/configuration.md
 useLibraryCodeForTypes = true
 
 [tool.ruff]
-# https://beta.ruff.rs/docs/configuration/
 select = ['E', 'W', 'F', 'I', 'B', 'C4', 'ARG', 'SIM']
 ignore = ['W291', 'W292', 'W293']
 
