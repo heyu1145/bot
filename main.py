@@ -10,6 +10,11 @@ import json
 import re
 import asyncio
 from keep_alive import keep_alive
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('discord')
+logger.setLevel(logging.INFO)
+
 
 # --------------------------
 # Token Validation
@@ -910,7 +915,64 @@ async def delete_event(interaction: discord.Interaction, event_id: str):
     except Exception as e:
         await interaction.response.send_message(
             f"❌ Something went wrong: {str(e)}", ephemeral=True)
+@bot.tree.command(name="delete_event", description="Delete an event (Staff, Admin, or Owner only)")
+@app_commands.describe(event_id="Event ID (find with /list_events)")
+async def delete_event(interaction: discord.Interaction, event_id: str):
+    if not interaction.guild:
+        return await interaction.response.send_message("❌ This command must be used in a server!", ephemeral=True)
 
+    try:
+        if not has_event_access(interaction):
+            await interaction.response.send_message(
+                "❌ Only staff, administrators, or owners can delete events!", 
+                ephemeral=True
+            )
+            return
+
+        try:
+            event_id_int = int(event_id)
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Invalid event ID! Use numbers only.", 
+                ephemeral=True
+            )
+            return
+
+        # 先获取事件确认存在
+        try:
+            event = await interaction.guild.fetch_scheduled_event(event_id_int)
+            event_name = event.name
+        except discord.NotFound:
+            await interaction.response.send_message(
+                f"❌ No event found with ID: `{event_id}`", 
+                ephemeral=True
+            )
+            return
+
+        # 删除事件
+        await event.delete()
+        await interaction.response.send_message(
+            f"✅ Successfully deleted event: **{event_name}** (ID: `{event_id}`)", 
+            ephemeral=True
+        )
+        print(f"✅ Deleted event: {event_name} (ID: {event_id})")
+
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            "❌ I don't have permission to delete events in this server!", 
+            ephemeral=True
+        )
+    except discord.HTTPException as e:
+        await interaction.response.send_message(
+            f"❌ Discord API error: {str(e)}", 
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ Unexpected error: {str(e)}", 
+            ephemeral=True
+        )
+        print(f"❌ Error in delete_event: {e}")
 @bot.tree.command(name="list_events", description="List all upcoming events")
 async def list_events(interaction: discord.Interaction):
     if not interaction.guild:
@@ -929,6 +991,52 @@ async def list_events(interaction: discord.Interaction):
         await interaction.response.send_message("\n\n".join(event_list), ephemeral=True)
     except Exception as e:
         await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
+        @bot.tree.command(name="list_events", description="List all upcoming events")
+async def list_events(interaction: discord.Interaction):
+    if not interaction.guild:
+        return await interaction.response.send_message("❌ This command must be used in a server!", ephemeral=True)
+
+    try:
+        print(f"🔄 Listing events for guild: {interaction.guild.name}")
+        events = await interaction.guild.fetch_scheduled_events()
+        
+        if not events:
+            return await interaction.response.send_message("ℹ️ No upcoming events found.", ephemeral=True)
+
+        event_list = []
+        for i, event in enumerate(events, 1):
+            event_info = (
+                f"**{i}. {event.name}** (ID: `{event.id}`)\n"
+                f"   🕒 UTC: {event.start_time.strftime('%Y-%m-%d %H:%M')}"
+                f" - {event.end_time.strftime('%H:%M')}\n"
+                f"   📍 Location: {event.location or 'No location'}\n"
+            )
+            event_list.append(event_info)
+
+        # 分页处理，避免消息过长
+        response = "\n".join(event_list)
+        if len(response) > 2000:
+            response = response[:1990] + "..."
+            
+        await interaction.response.send_message(response, ephemeral=True)
+        print(f"✅ Listed {len(events)} events successfully")
+
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            "❌ I don't have permission to view events in this server!", 
+            ephemeral=True
+        )
+    except discord.HTTPException as e:
+        await interaction.response.send_message(
+            f"❌ Discord API error: {str(e)}", 
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ Unexpected error: {str(e)}", 
+            ephemeral=True
+        )
+        print(f"❌ Error in list_events: {e}")
 
 @bot.tree.command(name="get_ticket_count", description="Check how many tickets a user has open")
 @app_commands.describe(user="The user to check (defaults to yourself)")
