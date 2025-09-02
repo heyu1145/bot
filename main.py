@@ -936,17 +936,6 @@ async def list_events(interaction: discord.Interaction):
         print(f"❌ Error in list_events: {e}")
         await interaction.response.send_message("❌ Failed to retrieve events. Please try again later.", ephemeral=True)
 
-@bot.tree.command(name="debug_commands", description="Check if commands are registered")
-async def debug_commands(interaction: discord.Interaction):
-    """检查所有命令的注册状态"""
-    try:
-        # 获取所有已注册的命令
-        all_commands = bot.tree.get_commands()
-        registered_names = [cmd.name for cmd in all_commands]
-        
-        # 检查特定命令是否存在
-        list_events_exists = any(cmd.name == "list_event")
-
 @bot.tree.command(name="delete_event", description="Delete a scheduled event (Staff/Admin only)")
 @app_commands.describe(event_id="The ID of the event to delete")
 async def delete_event(interaction: discord.Interaction, event_id: str):
@@ -1069,6 +1058,48 @@ async def event_info(interaction: discord.Interaction, event_id: str):
             
     except Exception as e:
         await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
+
+@bot.tree.command(name="debug_commands", description="Check if commands are registered")
+async def debug_commands(interaction: discord.Interaction):
+    """检查所有命令的注册状态"""
+    try:
+        # 获取所有已注册的命令
+        all_commands = bot.tree.get_commands()
+        registered_names = [cmd.name for cmd in all_commands]
+        
+        # 检查特定命令是否存在
+        list_events_exists = any(cmd.name == "list_events" for cmd in all_commands)
+        delete_event_exists = any(cmd.name == "delete_event" for cmd in all_commands)
+        
+        embed = discord.Embed(
+            title="🔧 Command Debug Info",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(
+            name="Registered Commands", 
+            value="\n".join([f"• /{name}" for name in registered_names]) or "None",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="Problem Commands Status",
+            value=f"• /list_events: {'✅' if list_events_exists else '❌'}\n"
+                  f"• /delete_event: {'✅' if delete_event_exists else '❌'}",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="Guild Info",
+            value=f"Server: {interaction.guild.name}\n"
+                  f"ID: {interaction.guild.id}",
+            inline=False
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Debug error: {str(e)}", ephemeral=True)
 
 @bot.tree.command(name="get_ticket_count", description="Check how many tickets a user has open")
 @app_commands.describe(user="The user to check (defaults to yourself)")
