@@ -1036,7 +1036,36 @@ async def list_events(interaction: discord.Interaction):
             f"❌ Unexpected error: {str(e)}", 
             ephemeral=True
         )
-        print(f"❌ Error in list_events: {e}")
+        print(f"❌ Error in list_events: {e}")@bot.tree.command(name="list_events", description="List all upcoming events")
+async def list_events(interaction: discord.Interaction):
+    """List all upcoming events in the server"""
+    if not interaction.guild:
+        return await interaction.response.send_message("❌ This command must be used in a server!", ephemeral=True)
+
+    try:
+        # Get all scheduled events
+        events = await interaction.guild.fetch_scheduled_events()
+        
+        if not events:
+            return await interaction.response.send_message("ℹ️ No upcoming events found.", ephemeral=True)
+
+        # Create event list
+        event_list = []
+        for event in events:
+            event_info = (
+                f"**{event.name}** (ID: `{event.id}`)\n"
+                f"UTC: {event.start_time.strftime('%Y-%m-%d %H:%M')} - {event.end_time.strftime('%H:%M')}\n"
+            )
+            event_list.append(event_info)
+
+        # Send response
+        response = "\n\n".join(event_list)
+        await interaction.response.send_message(response, ephemeral=True)
+        
+    except discord.Forbidden:
+        await interaction.response.send_message("❌ I don't have permission to view events!", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
 
 @bot.tree.command(name="get_ticket_count", description="Check how many tickets a user has open")
 @app_commands.describe(user="The user to check (defaults to yourself)")
