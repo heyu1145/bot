@@ -945,7 +945,7 @@ async def debug_commands(interaction: discord.Interaction):
         registered_names = [cmd.name for cmd in all_commands]
         
         # 检查特定命令是否存在
-        list_events_exists = any(cmd.name == "list_event
+        list_events_exists = any(cmd.name == "list_event")
 
 @bot.tree.command(name="delete_event", description="Delete a scheduled event (Staff/Admin only)")
 @app_commands.describe(event_id="The ID of the event to delete")
