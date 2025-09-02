@@ -936,6 +936,17 @@ async def list_events(interaction: discord.Interaction):
         print(f"❌ Error in list_events: {e}")
         await interaction.response.send_message("❌ Failed to retrieve events. Please try again later.", ephemeral=True)
 
+@bot.tree.command(name="debug_commands", description="Check if commands are registered")
+async def debug_commands(interaction: discord.Interaction):
+    """检查所有命令的注册状态"""
+    try:
+        # 获取所有已注册的命令
+        all_commands = bot.tree.get_commands()
+        registered_names = [cmd.name for cmd in all_commands]
+        
+        # 检查特定命令是否存在
+        list_events_exists = any(cmd.name == "list_event
+
 @bot.tree.command(name="delete_event", description="Delete a scheduled event (Staff/Admin only)")
 @app_commands.describe(event_id="The ID of the event to delete")
 async def delete_event(interaction: discord.Interaction, event_id: str):
