@@ -1001,39 +1001,43 @@ async def event_info(interaction: discord.Interaction, event_id: str):
     except Exception as e:
         await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
-@bot.tree.command(name="bot_status", description="Check bot health and command stats")
+@bot.tree.command(name="bot_status", description="Check if bot is online and working")
 async def bot_status(interaction: discord.Interaction):
-    """检查机器人状态"""
+    """简单的机器人状态检查"""
     try:
-        # 立即响应
-        await interaction.response.defer(ephemeral=True)
+        # 计算运行时间
+        uptime = datetime.now() - bot.start_time
+        hours, remainder = divmod(uptime.total_seconds(), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_str = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
         
-        # 收集状态信息
-        status_info = [
-            f"🤖 **Bot Status Report**",
-            f"• Logged in as: {bot.user.name}",
-            f"• Guilds: {len(bot.guilds)}",
-            f"• Ping: {round(bot.latency * 1000)}ms",
-            f"• Uptime: {datetime.now() - bot.start_time if hasattr(bot, 'start_time') else 'N/A'}",
-            "",
-            f"📊 **Command Usage**"
-        ]
+        # 创建状态消息
+        status_message = (
+            "🤖 **Bot Status**\n"
+            f"• **Status**: ✅ Online\n"
+            f"• **Username**: {bot.user.name}\n"
+            f"• **Ping**: {round(bot.latency * 1000)}ms\n"
+            f"• **Uptime**: {uptime_str}\n"
+            f"• **Servers**: {len(bot.guilds)}\n"
+            f"• **Commands**: {len(bot.tree.get_commands())} loaded\n"
+            "\n"
+            "🟢 **All systems operational**"
+        )
         
-        # 添加命令使用统计
-        for cmd, count in sorted(command_usage.items()):
-            status_info.append(f"• /{cmd}: {count} times")
-        
-        status_info.extend([
-            "",
-            f"🔧 **System**",
-            f"• Python: {sys.version.split()[0]}",
-            f"• discord.py: {discord.__version__}",
-            f"• Last restart: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        ])
-        
-        await interaction.followup.send("\n".join(status_info))
+        await interaction.response.send_message(status_message, ephemeral=True)
+        print(f"✅ Status checked by {interaction.user.name}")
         
     except Exception as e:
+        # 简化错误处理
+        error_message = "❌ Failed to check status"
+        try:
+            await interaction.response.send_message(error_message, ephemeral=True)
+        except:
+            # 如果响应失败，尝试发送普通消息
+            try:
+                await interaction.channel.send(f"{interaction.user.mention} {error_message}", delete_after=10)
+            except:
+                pass
         print(f"❌ Status command error: {e}")
 
 @bot.tree.command(name="debug_commands", description="Check if commands are registered")
