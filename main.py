@@ -878,144 +878,86 @@ async def create_event(interaction: discord.Interaction, name: str, description:
     except Exception as e:
         await interaction.response.send_message(f"❌ Error creating event: {str(e)}", ephemeral=True)
 
-# --------------------------
-# Improved Event Commands
-# --------------------------
-
-@bot.tree.command(name="list_events", description="List all upcoming events in this server")
+@bot.tree.command(name="list_events", description="List all upcoming events")
 async def list_events(interaction: discord.Interaction):
-    """List all scheduled events with better formatting"""
+    """全新的列表事件命令"""
     try:
-        # Check if in guild
+        print(f"📅 List events called by {interaction.user.name}")
+        
+        # 立即响应防止超时
+        await interaction.response.defer(ephemeral=True)
+        
         if not interaction.guild:
-            await interaction.response.send_message("❌ This command only works in servers.", ephemeral=True)
+            await interaction.followup.send("❌ Server only command!")
             return
 
-        # Check permissions
-        if not has_event_access(interaction):
-            await interaction.response.send_message("❌ You don't have permission to view events.", ephemeral=True)
-            return
-
-        # Fetch events with error handling
+        # 获取事件
         try:
             events = await interaction.guild.fetch_scheduled_events()
-        except discord.Forbidden:
-            await interaction.response.send_message("❌ Bot lacks permission to view events.", ephemeral=True)
-            return
-        except discord.HTTPException as e:
-            await interaction.response.send_message(f"❌ Discord API error: {e}", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Failed to fetch events: {e}")
             return
 
-        # Handle no events case
         if not events:
-            await interaction.response.send_message("📅 No upcoming events scheduled.", ephemeral=True)
+            await interaction.followup.send("📭 No events found")
             return
 
-        # Create formatted event list
-        event_embeds = []
+        # 发送结果
+        event_list = []
         for event in events:
-            embed = discord.Embed(
-                title=f"📅 {event.name}",
-                color=discord.Color.blue()
-            )
-            embed.add_field(name="Event ID", value=f"`{event.id}`", inline=True)
-            embed.add_field(name="Start Time", value=event.start_time.strftime("%Y-%m-%d %H:%M UTC"), inline=True)
-            embed.add_field(name="Location", value=event.location or "Not specified", inline=False)
-            embed.add_field(name="Description", value=event.description[:100] + "..." if event.description and len(event.description) > 100 else event.description or "No description", inline=False)
-            
-            event_embeds.append(embed)
-
-        # Send response - first event immediately, others as followups if needed
-        await interaction.response.send_message(embed=event_embeds[0], ephemeral=True)
+            event_list.append(f"**{event.name}** (ID: `{event.id}`) - {event.start_time.strftime('%m/%d %H:%M')}")
         
-        # Send remaining events as followups if there are more
-        for embed in event_embeds[1:]:
-            await interaction.followup.send(embed=embed, ephemeral=True)
+        response = "\n".join(event_list)
+        await interaction.followup.send(response)
+        print(f"✅ Listed {len(events)} events")
 
     except Exception as e:
-        print(f"❌ Error in list_events: {e}")
-        await interaction.response.send_message("❌ Failed to retrieve events. Please try again later.", ephemeral=True)
+        print(f"❌ list_events error: {e}")
+        try:
+            await interaction.followup.send("❌ Command failed")
+        except:
+            pass
 
-@bot.tree.command(name="delete_event", description="Delete a scheduled event (Staff/Admin only)")
-@app_commands.describe(event_id="The ID of the event to delete")
+@bot.tree.command(name="delete_event", description="Delete an event")
+@app_commands.describe(event_id="Event ID to delete")
 async def delete_event(interaction: discord.Interaction, event_id: str):
-    """Delete a specific event with proper validation"""
+    """全新的事件删除命令"""
     try:
-        # Check if in guild
+        print(f"🗑️ Delete event called: {event_id} by {interaction.user.name}")
+        
+        # 立即响应
+        await interaction.response.defer(ephemeral=True)
+        
         if not interaction.guild:
-            await interaction.response.send_message("❌ This command only works in servers.", ephemeral=True)
+            await interaction.followup.send("❌ Server only command!")
             return
 
-        # Check permissions
+        # 验证权限
         if not has_event_access(interaction):
-            await interaction.response.send_message("❌ Only staff or administrators can delete events.", ephemeral=True)
+            await interaction.followup.send("❌ Permission denied!")
             return
 
-        # Validate event ID
+        # 查找事件
         try:
-            event_id_int = int(event_id.strip())
-        except ValueError:
-            await interaction.response.send_message("❌ Invalid event ID. Please provide a numeric ID.", ephemeral=True)
+            event = await interaction.guild.fetch_scheduled_event(int(event_id))
+        except:
+            await interaction.followup.send("❌ Event not found!")
             return
 
-        # Fetch the event to verify it exists
+        # 删除事件
         try:
-            event = await interaction.guild.fetch_scheduled_event(event_id_int)
-        except discord.NotFound:
-            await interaction.response.send_message(f"❌ Event with ID `{event_id}` not found.", ephemeral=True)
-            return
-        except discord.Forbidden:
-            await interaction.response.send_message("❌ Bot lacks permission to manage events.", ephemeral=True)
-            return
-
-        # Confirm deletion with a button
-        class ConfirmDeleteView(discord.ui.View):
-            def __init__(self, event):
-                super().__init__(timeout=30)
-                self.event = event
-                self.confirmed = False
-
-            @discord.ui.button(label="Confirm Delete", style=discord.ButtonStyle.danger)
-            async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-                try:
-                    # Delete the event
-                    event_name = self.event.name
-                    await self.event.delete()
-                    
-                    await interaction.response.send_message(
-                        f"✅ Successfully deleted event: **{event_name}**", 
-                        ephemeral=True
-                    )
-                    self.confirmed = True
-                    self.stop()
-                    
-                except Exception as e:
-                    await interaction.response.send_message(
-                        f"❌ Failed to delete event: {e}", 
-                        ephemeral=True
-                    )
-
-            @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
-            async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-                await interaction.response.send_message("❌ Event deletion cancelled.", ephemeral=True)
-                self.stop()
-
-            async def on_timeout(self):
-                if not self.confirmed:
-                    # You can send a timeout message if needed
-                    pass
-
-        # Send confirmation message
-        view = ConfirmDeleteView(event)
-        await interaction.response.send_message(
-            f"⚠️ Are you sure you want to delete event: **{event.name}**?",
-            view=view,
-            ephemeral=True
-        )
+            await event.delete()
+            await interaction.followup.send(f"✅ Deleted event: {event.name}")
+            print(f"✅ Event deleted: {event.name}")
+        except Exception as e:
+            await interaction.followup.send(f"❌ Delete failed: {e}")
 
     except Exception as e:
-        print(f"❌ Error in delete_event: {e}")
-        await interaction.response.send_message("❌ An error occurred while processing your request.", ephemeral=True)
+        print(f"❌ delete_event error: {e}")
+        try:
+            await interaction.followup.send("❌ Command failed")
+        except:
+            pass
 
 # Helper command to debug events
 @bot.tree.command(name="event_info", description="Get detailed information about an event")
@@ -1059,6 +1001,41 @@ async def event_info(interaction: discord.Interaction, event_id: str):
     except Exception as e:
         await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
+@bot.tree.command(name="bot_status", description="Check bot health and command stats")
+async def bot_status(interaction: discord.Interaction):
+    """检查机器人状态"""
+    try:
+        # 立即响应
+        await interaction.response.defer(ephemeral=True)
+        
+        # 收集状态信息
+        status_info = [
+            f"🤖 **Bot Status Report**",
+            f"• Logged in as: {bot.user.name}",
+            f"• Guilds: {len(bot.guilds)}",
+            f"• Ping: {round(bot.latency * 1000)}ms",
+            f"• Uptime: {datetime.now() - bot.start_time if hasattr(bot, 'start_time') else 'N/A'}",
+            "",
+            f"📊 **Command Usage**"
+        ]
+        
+        # 添加命令使用统计
+        for cmd, count in sorted(command_usage.items()):
+            status_info.append(f"• /{cmd}: {count} times")
+        
+        status_info.extend([
+            "",
+            f"🔧 **System**",
+            f"• Python: {sys.version.split()[0]}",
+            f"• discord.py: {discord.__version__}",
+            f"• Last restart: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        ])
+        
+        await interaction.followup.send("\n".join(status_info))
+        
+    except Exception as e:
+        print(f"❌ Status command error: {e}")
+
 @bot.tree.command(name="debug_commands", description="Check if commands are registered")
 async def debug_commands(interaction: discord.Interaction):
     """检查所有命令的注册状态"""
@@ -1066,10 +1043,6 @@ async def debug_commands(interaction: discord.Interaction):
         # 获取所有已注册的命令
         all_commands = bot.tree.get_commands()
         registered_names = [cmd.name for cmd in all_commands]
-        
-        # 检查特定命令是否存在
-        list_events_exists = any(cmd.name == "list_events" for cmd in all_commands)
-        delete_event_exists = any(cmd.name == "delete_event" for cmd in all_commands)
         
         embed = discord.Embed(
             title="🔧 Command Debug Info",
@@ -1081,14 +1054,6 @@ async def debug_commands(interaction: discord.Interaction):
             value="\n".join([f"• /{name}" for name in registered_names]) or "None",
             inline=False
         )
-        
-        embed.add_field(
-            name="Problem Commands Status",
-            value=f"• /list_events: {'✅' if list_events_exists else '❌'}\n"
-                  f"• /delete_event: {'✅' if delete_event_exists else '❌'}",
-            inline=False
-        )
-        
         embed.add_field(
             name="Guild Info",
             value=f"Server: {interaction.guild.name}\n"
@@ -1121,9 +1086,18 @@ async def get_ticket_count(interaction: discord.Interaction, user: discord.User 
 # --------------------------
 @bot.event
 async def on_ready():
+    # 记录启动时间
+    bot.start_time = datetime.now()
+    
     print(f'✅ Logged in as {bot.user.name} (ID: {bot.user.id})')
-    print(f'⏳ Loading server-specific views...')
-
+    print(f'🔗 Connected to {len(bot.guilds)} server(s)')
+    
+    # 简化的同步
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} commands")
+    except Exception as e:
+        print(f"⚠️ Sync note: {e}")
     # Register views for all servers and setups
     for guild in bot.guilds:
         guild_id = str(guild.id)
@@ -1140,6 +1114,17 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Command sync failed: {e}")
 
+# 命令执行跟踪
+command_usage = {}
+
+@bot.event
+async def on_interaction(interaction: discord.Interaction):
+    """监控所有交互"""
+    if interaction.type == discord.InteractionType.application_command:
+        command_name = interaction.data.get('name', 'unknown')
+        command_usage[command_name] = command_usage.get(command_name, 0) + 1
+        print(f"⚡ Command executed: /{command_name} by {interaction.user.name}")
+
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error):
     if isinstance(error, app_commands.CommandNotFound):
@@ -1150,6 +1135,29 @@ async def on_app_command_error(interaction: discord.Interaction, error):
         )
     else:
         print(f"❌ Command error: {error}")
+
+@bot.tree.command(name="test_response", description="Test response mechanisms")
+async def test_response(interaction: discord.Interaction):
+    """测试所有响应方式"""
+    try:
+        print(f"🧪 Testing response for user: {interaction.user.name}")
+        
+        # 测试立即响应
+        await interaction.response.send_message("✅ Immediate response received!", ephemeral=True)
+        print("✅ Immediate response sent")
+        
+        # 测试延迟响应
+        await asyncio.sleep(1)
+        await interaction.followup.send("✅ Follow-up message also works!", ephemeral=True)
+        print("✅ Follow-up sent")
+        
+    except Exception as e:
+        print(f"❌ Response test failed: {e}")
+        # 尝试原始消息发送作为备用
+        try:
+            await interaction.channel.send("❌ Response failed, but bot is alive!")
+        except:
+            pass
 
 # --------------------------
 # Run Bot
