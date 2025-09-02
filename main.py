@@ -969,6 +969,17 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Command sync failed: {e}")
 
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error):
+    if isinstance(error, app_commands.CommandNotFound):
+        print(f"❌ Command not found: {interaction.command_name}")
+        await interaction.response.send_message(
+            "❌ Command not synced yet. Please wait or restart bot.",
+            ephemeral=True
+        )
+    else:
+        print(f"❌ Command error: {error}")
+
 # --------------------------
 # Run Bot
 # --------------------------
