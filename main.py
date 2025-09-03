@@ -285,23 +285,22 @@ class AddTicketOptionModal(Modal, title="➕ Add Ticket Option"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        option_data = {
+        self.option_data = {
             'button_label': str(self.button_label),
             'button_emoji': str(self.button_emoji) if self.button_emoji.value else None,
             'title_format': str(self.title_format),
             'open_message': str(self.open_message)
         }
         
-        view = ChannelSelectView(option_data, interaction.guild)
+        view = ChannelSelectView(self.option_data, interaction.guild)
         await interaction.response.send_message(
             f"✅ Basic info saved! Now select handle channel for: **{self.button_label.value}**",
             view=view,
             ephemeral=True
         )
-
+        
 # ==================== VIEW COMPONENTS ====================
 # 把这些视图放在模态窗口之后
-
 class PanelSetupView(View):
     def __init__(self, channel: discord.TextChannel, panel_title: str, panel_description: str):
         super().__init__(timeout=300)
@@ -313,7 +312,20 @@ class PanelSetupView(View):
     @discord.ui.button(label="Add Ticket Option", style=discord.ButtonStyle.primary, emoji="➕", row=0)
     async def add_option(self, interaction: discord.Interaction, button: Button):
         modal = AddTicketOptionModal()
+        # Store the interaction for later use
+        modal.interaction = interaction
         await interaction.response.send_modal(modal)
+        
+        # Wait for the modal to submit
+        await modal.wait()
+        
+        # Check if the modal was submitted successfully
+        if hasattr(modal, 'option_data') and modal.option_data:
+            self.ticket_options.append(modal.option_data)
+            await modal.interaction.followup.send(
+                f"✅ Option '{modal.option_data['button_label']}' added successfully!",
+                ephemeral=True
+            )
 
     @discord.ui.button(label="Send Panel", style=discord.ButtonStyle.success, emoji="🚀", row=1)
     async def send_panel(self, interaction: discord.Interaction, button: Button):
