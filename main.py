@@ -1568,7 +1568,7 @@ async def bot_status(interaction: discord.Interaction, panel_type: app_commands.
             embed = discord.Embed(
                 title="🔐 Bot Permissions Overview",
                 color=discord.Color.orange(),
-                timestamp=datetime.now(timezone.utc)  # 修复这里
+                timestamp=datetime.now()  # 修复这里
             )
             
             # 权限状态
@@ -1711,7 +1711,7 @@ async def get_ticket_count(interaction: discord.Interaction, user: discord.User 
 @bot.event
 async def on_ready():
     # 记录启动时间
-    bot.start_time = datetime.now()
+    bot.start_time = datetime.now(timezone.utc)
     
     print(f'✅ Logged in as {bot.user.name} (ID: {bot.user.id})')
     print(f'🔗 Connected to {len(bot.guilds)} server(s)')
