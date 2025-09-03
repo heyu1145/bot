@@ -217,6 +217,287 @@ async def generate_transcript(thread: discord.Thread, close_reason: str = None, 
 
     return "\n".join(transcript)
 
+class TicketPanelModal(Modal, title="Create Multi-Ticket Panel"):
+    panel_title = TextInput(
+        label="Panel Title",
+        placeholder="Enter panel title (e.g., Support Center)",
+        default="Support Tickets",
+        max_length=100,
+        required=True
+    )
+    
+    panel_description = TextInput(
+        label="Panel Description",
+        placeholder="Enter panel description",
+        default="Choose the type of support you need:",
+        style=discord.TextStyle.paragraph,
+        max_length=1000,
+        required=True
+    )
+    
+    def __init__(self, channel: discord.TextChannel):
+        super().__init__()
+        self.channel = channel
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild_id = str(interaction.guild.id)
+        setup_id = uuid.uuid4().hex[:8]
+
+        config = {
+            "id": setup_id,
+            "panel_channel_id": str(self.channel.id),
+            "panel_title": str(self.panel_title),
+            "panel_description": str(self.panel_description),
+            "ticket_options": [],
+            "created_at": datetime.utcnow().isoformat()
+        }
+
+        all_configs = load_multi_ticket_configs(guild_id)
+        all_configs.append(config)
+        save_multi_ticket_configs(guild_id, all_configs)
+
+        # 创建面板
+        embed = discord.Embed(
+            title=str(self.panel_title),
+            description=str(self.panel_description),
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="📋 Available Ticket Types",
+            value="No ticket options added yet. Click 'Manage Options' below to add ticket types.",
+            inline=False
+        )
+        embed.set_footer(text=f"Panel ID: {setup_id}")
+
+        view = MultiTicketManagementView(guild_id, setup_id)
+        await self.channel.send(embed=embed, view=view)
+        
+        await interaction.response.send_message(
+            f"✅ Multi-ticket panel created successfully!\n"
+            f"**Panel ID:** `{setup_id}`\n"
+            f"**Channel:** {self.channel.mention}\n\n"
+            f"Click 'Manage Options' on the panel to add ticket types.",
+            ephemeral=True
+        )
+
+class TicketOptionModal(Modal, title="Add Ticket Option"):
+    button_label = TextInput(
+        label="Button Label",
+        placeholder="e.g., Technical Support, Billing Help",
+        max_length=80,
+        required=True
+    )
+    
+    button_emoji = TextInput(
+        label="Button Emoji (optional)",
+        placeholder="e.g., 🛠️, 💰, ❓",
+        max_length=10,
+        required=False
+    )
+    
+    title_format = TextInput(
+        label="Ticket Title Format",
+        placeholder="Use {username} or {userid}",
+        default="ticket-{username}",
+        max_length=100,
+        required=True
+    )
+    
+    open_message = TextInput(
+        label="Welcome Message",
+        placeholder="Message shown when ticket is opened",
+        default="Please describe your issue and our team will assist you shortly.",
+        style=discord.TextStyle.paragraph,
+        max_length=1000,
+        required=True
+    )
+
+    def __init__(self, panel_id: str, handle_channel: discord.TextChannel, transcripts_channel: discord.TextChannel = None):
+        super().__init__()
+        self.panel_id = panel_id
+        self.handle_channel = handle_channel
+        self.transcripts_channel = transcripts_channel
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild_id = str(interaction.guild.id)
+        multi_config = get_multi_ticket_setup_by_id(guild_id, self.panel_id)
+        
+        if not multi_config:
+            await interaction.response.send_message("❌ Panel not found!", ephemeral=True)
+            return
+
+        # 创建票务选项
+        ticket_option_id = uuid.uuid4().hex[:6]
+        ticket_option = {
+            "id": ticket_option_id,
+            "button_label": str(self.button_label),
+            "button_emoji": str(self.button_emoji) if self.button_emoji.value else None,
+            "handle_channel_id": str(self.handle_channel.id),
+            "transcripts_channel_id": str(self.transcripts_channel.id) if self.transcripts_channel else None,
+            "title_format": str(self.title_format),
+            "open_message": str(self.open_message),
+            "created_at": datetime.utcnow().isoformat()
+        }
+
+        # 添加到配置
+        if "ticket_options" not in multi_config:
+            multi_config["ticket_options"] = []
+        multi_config["ticket_options"].append(ticket_option)
+
+        # 更新配置
+        all_configs = load_multi_ticket_configs(guild_id)
+        all_configs = [c for c in all_configs if c['id'] != self.panel_id]
+        all_configs.append(multi_config)
+        save_multi_ticket_configs(guild_id, all_configs)
+
+        # 更新面板
+        await update_multi_ticket_panel(interaction.guild, multi_config)
+
+        await interaction.response.send_message(
+            f"✅ Ticket option added successfully!\n"
+            f"**Label:** {self.button_label.value}\n"
+            f"**Handle Channel:** {self.handle_channel.mention}",
+            ephemeral=True
+        )
+
+class MultiTicketManagementView(View):
+    def __init__(self, guild_id: str, panel_id: str):
+        super().__init__(timeout=None)
+        self.guild_id = guild_id
+        self.panel_id = panel_id
+
+    @discord.ui.button(label="Manage Options", style=discord.ButtonStyle.secondary, emoji="⚙️")
+    async def manage_options(self, interaction: discord.Interaction, button: Button):
+        if not has_event_access(interaction):
+            await interaction.response.send_message("❌ Only staff can manage ticket options!", ephemeral=True)
+            return
+
+        multi_config = get_multi_ticket_setup_by_id(self.guild_id, self.panel_id)
+        if not multi_config:
+            await interaction.response.send_message("❌ Panel not found!", ephemeral=True)
+            return
+
+        # 显示管理选项
+        embed = discord.Embed(
+            title="🎫 Manage Ticket Options",
+            description=f"Panel: **{multi_config['panel_title']}**\nID: `{self.panel_id}`",
+            color=discord.Color.blue()
+        )
+
+        if "ticket_options" in multi_config and multi_config["ticket_options"]:
+            for i, option in enumerate(multi_config["ticket_options"], 1):
+                emoji_str = f"{option['button_emoji']} " if option["button_emoji"] else ""
+                embed.add_field(
+                    name=f"{i}. {emoji_str}{option['button_label']}",
+                    value=f"Handle: <#{option['handle_channel_id']}>\nID: `{option['id']}`",
+                    inline=False
+                )
+        else:
+            embed.add_field(
+                name="No Options Yet",
+                value="Click 'Add Option' below to create your first ticket type.",
+                inline=False
+            )
+
+        view = TicketOptionsManagementView(self.guild_id, self.panel_id)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    @discord.ui.button(label="Refresh Panel", style=discord.ButtonStyle.success, emoji="🔄")
+    async def refresh_panel(self, interaction: discord.Interaction, button: Button):
+        if not has_event_access(interaction):
+            await interaction.response.send_message("❌ Only staff can refresh the panel!", ephemeral=True)
+            return
+
+        multi_config = get_multi_ticket_setup_by_id(self.guild_id, self.panel_id)
+        if not multi_config:
+            await interaction.response.send_message("❌ Panel not found!", ephemeral=True)
+            return
+
+        await update_multi_ticket_panel(interaction.guild, multi_config)
+        await interaction.response.send_message("✅ Panel refreshed successfully!", ephemeral=True)
+
+class TicketOptionsManagementView(View):
+    def __init__(self, guild_id: str, panel_id: str):
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.panel_id = panel_id
+
+    @discord.ui.button(label="Add Option", style=discord.ButtonStyle.primary, emoji="➕")
+    async def add_option(self, interaction: discord.Interaction, button: Button):
+        # 创建频道选择视图
+        embed = discord.Embed(
+            title="📁 Select Handle Channel",
+            description="Please select the channel where staff will handle this type of ticket:",
+            color=discord.Color.blue()
+        )
+
+        view = ChannelSelectionView(self.guild_id, self.panel_id, "handle")
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    @discord.ui.button(label="Delete Option", style=discord.ButtonStyle.danger, emoji="🗑️")
+    async def delete_option(self, interaction: discord.Interaction, button: Button):
+        multi_config = get_multi_ticket_setup_by_id(self.guild_id, self.panel_id)
+        if not multi_config or "ticket_options" not in multi_config or not multi_config["ticket_options"]:
+            await interaction.response.send_message("❌ No options to delete!", ephemeral=True)
+            return
+
+        # 创建选项选择视图
+        embed = discord.Embed(
+            title="🗑️ Delete Ticket Option",
+            description="Select which ticket option to delete:",
+            color=discord.Color.red()
+        )
+
+        view = OptionSelectionView(self.guild_id, self.panel_id, "delete")
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def close_menu(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.defer()
+        await interaction.delete_original_response()
+
+class ChannelSelectionView(View):
+    def __init__(self, guild_id: str, panel_id: str, action: str):
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.panel_id = panel_id
+        self.action = action
+
+    @discord.ui.channel_select(placeholder="Select handle channel...", channel_types=[discord.ChannelType.text])
+    async def select_handle_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        handle_channel = select.values[0]
+        
+        # 询问是否要设置记录频道
+        embed = discord.Embed(
+            title="📝 Select Transcripts Channel (Optional)",
+            description="Select a channel for ticket transcripts, or skip if not needed:",
+            color=discord.Color.blue()
+        )
+
+        view = TranscriptChannelView(self.guild_id, self.panel_id, handle_channel)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+class TranscriptChannelView(View):
+    def __init__(self, guild_id: str, panel_id: str, handle_channel: discord.TextChannel):
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.panel_id = panel_id
+        self.handle_channel = handle_channel
+
+    @discord.ui.channel_select(placeholder="Select transcripts channel...", channel_types=[discord.ChannelType.text])
+    async def select_transcript_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        transcripts_channel = select.values[0]
+        await self.create_option(interaction, transcripts_channel)
+
+    @discord.ui.button(label="Skip Transcripts", style=discord.ButtonStyle.secondary)
+    async def skip_transcripts(self, interaction: discord.Interaction, button: Button):
+        await self.create_option(interaction, None)
+
+    async def create_option(self, interaction: discord.Interaction, transcripts_channel: discord.TextChannel = None):
+        # 打开票务选项创建模态
+        modal = TicketOptionModal(self.panel_id, self.handle_channel, transcripts_channel)
+        await interaction.response.send_modal(modal)
+
 class JoinTicketView(View):
     def __init__(self, thread_id: str, guild_id: str):
         super().__init__(timeout=None)
@@ -702,6 +983,20 @@ async def delticketsetup(interaction: discord.Interaction, setup_id: str):
     await interaction.response.send_message(
         f"✅ Ticket setup `{setup_id}` has been deleted from this server", ephemeral=True
     )
+
+@bot.tree.command(name="create_ticket_panel", description="Create an interactive multi-ticket panel")
+@app_commands.describe(channel="Channel where the ticket panel will be created")
+async def create_ticket_panel(interaction: discord.Interaction, channel: discord.TextChannel):
+    if not interaction.guild:
+        await interaction.response.send_message("❌ This command must be used in a server!", ephemeral=True)
+        return
+    if not is_admin_or_owner(interaction):
+        await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+        return
+
+    # 打开面板创建模态
+    modal = TicketPanelModal(channel)
+    await interaction.response.send_modal(modal)
 
 @bot.tree.command(name="list_ticket_setups", description="List all ticket setups for this server (Admin only)")
 async def list_ticket_setups(interaction: discord.Interaction):
