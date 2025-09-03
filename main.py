@@ -1,7 +1,7 @@
 import discord
-from discord import app_commands
+from discord import app_commands,SelectOption
 from discord.ext import commands
-from discord.ui import Button, View, TextInput, Modal, Select, SelectOption
+from discord.ui import Button, View, TextInput, Modal, Select
 import os
 import pytz
 import uuid
