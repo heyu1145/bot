@@ -360,6 +360,44 @@ class TicketOptionModal(Modal, title="Add Ticket Option"):
             ephemeral=True
         )
 
+class ChannelSelectionView(View):
+    def __init__(self, guild_id: str, panel_id: str, action: str):
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.panel_id = panel_id
+        self.action = action
+        self.select = None
+
+    async def initialize_options(self, guild):
+        """初始化频道选项"""
+        options = []
+        for channel in guild.text_channels:
+            if isinstance(channel, discord.TextChannel):
+                options.append(discord.SelectOption(
+                    label=channel.name[:25],
+                    value=str(channel.id),
+                    description=f"ID: {channel.id}"[:50]
+                ))
+        
+        self.select = discord.ui.Select(
+            placeholder="Select handle channel...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+        self.select.callback = self.select_handle_channel
+        self.add_item(self.select)
+
+    async def select_handle_channel(self, interaction: discord.Interaction):
+        handle_channel_id = self.select.values[0]
+        handle_channel = interaction.guild.get_channel(int(handle_channel_id))
+        
+        if not handle_channel:
+            await interaction.response.send_message("❌ Channel not found!", ephemeral=True)
+            return
+
+        # 继续流程...
+
 class MultiTicketManagementView(View):
     def __init__(self, guild_id: str, panel_id: str):
         super().__init__(timeout=None)
@@ -431,51 +469,11 @@ class TicketOptionsManagementView(View):
             color=discord.Color.blue()
         )
 
+        # 传递interaction.guild来获取频道选项
         view = ChannelSelectionView(self.guild_id, self.panel_id, "handle")
+        # 需要先初始化选择器选项
+        await view.initialize_options(interaction.guild)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-    @discord.ui.button(label="Delete Option", style=discord.ButtonStyle.danger, emoji="🗑️")
-    async def delete_option(self, interaction: discord.Interaction, button: Button):
-        multi_config = get_multi_ticket_setup_by_id(self.guild_id, self.panel_id)
-        if not multi_config or "ticket_options" not in multi_config or not multi_config["ticket_options"]:
-            await interaction.response.send_message("❌ No options to delete!", ephemeral=True)
-            return
-
-        # 创建选项选择视图
-        embed = discord.Embed(
-            title="🗑️ Delete Ticket Option",
-            description="Select which ticket option to delete:",
-            color=discord.Color.red()
-        )
-
-        view = OptionSelectionView(self.guild_id, self.panel_id, "delete")
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-    @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary, emoji="❌")
-    async def close_menu(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.defer()
-        await interaction.delete_original_response()
-
-class ChannelSelectionView(View):
-    def __init__(self, guild_id: str, panel_id: str, action: str):
-        super().__init__(timeout=120)
-        self.guild_id = guild_id
-        self.panel_id = panel_id
-        self.action = action
-
-    @discord.ui.channel_select(placeholder="Select handle channel...", channel_types=[discord.ChannelType.text])
-    async def select_handle_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
-        handle_channel = select.values[0]
-        
-        # 询问是否要设置记录频道
-        embed = discord.Embed(
-            title="📝 Select Transcripts Channel (Optional)",
-            description="Select a channel for ticket transcripts, or skip if not needed:",
-            color=discord.Color.blue()
-        )
-
-        view = TranscriptChannelView(self.guild_id, self.panel_id, handle_channel)
-        await interaction.response.edit_message(embed=embed, view=view)
 
 class TranscriptChannelView(View):
     def __init__(self, guild_id: str, panel_id: str, handle_channel: discord.TextChannel):
@@ -483,15 +481,45 @@ class TranscriptChannelView(View):
         self.guild_id = guild_id
         self.panel_id = panel_id
         self.handle_channel = handle_channel
+        
+        # 创建频道选择下拉菜单
+        self.select = Select(
+            placeholder="Select transcripts channel...",
+            options=self.get_channel_options(handle_channel.guild),
+            min_values=0,  # 允许不选择
+            max_values=1
+        )
+        self.select.callback = self.select_transcript_channel
+        self.add_item(self.select)
+        
+        # 添加跳过按钮
+        self.add_item(Button(label="Skip Transcripts", style=discord.ButtonStyle.secondary, custom_id="skip_transcripts"))
 
-    @discord.ui.channel_select(placeholder="Select transcripts channel...", channel_types=[discord.ChannelType.text])
-    async def select_transcript_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
-        transcripts_channel = select.values[0]
-        await self.create_option(interaction, transcripts_channel)
+    def get_channel_options(self, guild):
+        """获取文本频道选项"""
+        options = []
+        for channel in guild.text_channels:
+            if isinstance(channel, discord.TextChannel):
+                options.append(SelectOption(
+                    label=channel.name,
+                    value=str(channel.id),
+                    description=f"ID: {channel.id}"[:100]
+                ))
+        return options
 
-    @discord.ui.button(label="Skip Transcripts", style=discord.ButtonStyle.secondary)
-    async def skip_transcripts(self, interaction: discord.Interaction, button: Button):
-        await self.create_option(interaction, None)
+    async def select_transcript_channel(self, interaction: discord.Interaction):
+        if self.select.values:
+            transcript_channel_id = self.select.values[0]
+            transcript_channel = interaction.guild.get_channel(int(transcript_channel_id))
+            await self.create_option(interaction, transcript_channel)
+        else:
+            await self.create_option(interaction, None)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.data.get('custom_id') == 'skip_transcripts':
+            await self.create_option(interaction, None)
+            return False
+        return True
 
     async def create_option(self, interaction: discord.Interaction, transcripts_channel: discord.TextChannel = None):
         # 打开票务选项创建模态
