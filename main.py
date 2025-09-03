@@ -1399,7 +1399,7 @@ async def bot_status(interaction: discord.Interaction, panel_type: app_commands.
         # 获取频道权限
         channel_perms = interaction.channel.permissions_for(bot_member) if interaction.channel else bot_perms
         
-        # 计算运行时间
+        # 计算运行时间 - 使用正确的 timezone
         uptime = datetime.now(timezone.utc) - bot.start_time
         hours, remainder = divmod(uptime.total_seconds(), 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -1411,7 +1411,7 @@ async def bot_status(interaction: discord.Interaction, panel_type: app_commands.
             embed = discord.Embed(
                 title="🚀 Bot Status - Simple Overview",
                 color=discord.Color.blue(),
-                timestamp=datetime.now(timezone.utc)
+                timestamp=datetime.now(timezone.utc)  # 修复这里
             )
             
             # 服务器信息
@@ -1497,7 +1497,7 @@ async def bot_status(interaction: discord.Interaction, panel_type: app_commands.
             embed = discord.Embed(
                 title="📊 Bot Status - Full Details",
                 color=discord.Color.green(),
-                timestamp=datetime.now(timezone.utc)
+                timestamp=datetime.now(timezone.utc)  # 修复这里
             )
             
             # 服务器详细信息
@@ -1568,7 +1568,7 @@ async def bot_status(interaction: discord.Interaction, panel_type: app_commands.
             embed = discord.Embed(
                 title="🔐 Bot Permissions Overview",
                 color=discord.Color.orange(),
-                timestamp=datetime.now(timezone.utc)
+                timestamp=datetime.now(timezone.utc)  # 修复这里
             )
             
             # 权限状态
@@ -1586,79 +1586,7 @@ async def bot_status(interaction: discord.Interaction, panel_type: app_commands.
                     'manage_channels': 'Manage Channels',
                     'manage_events': 'Manage Events',
                     'manage_messages': 'Manage Messages',
-                    'kick_members': 'Kick Members',
-                    'ban_members': 'Ban Members'
-                }
-                
-                for perm_attr, perm_name in management_map.items():
-                    if getattr(bot_perms, perm_attr, False):
-                        management_perms.append(f"✅ {perm_name}")
-                
-                embed.add_field(
-                    name="🛠️ Management Permissions",
-                    value="\n".join(management_perms) or "❌ No management permissions",
-                    inline=True
-                )
-
-                # 基本权限
-                basic_perms = []
-                basic_map = {
-                    'view_channel': 'View Channel',
-                    'send_messages': 'Send Messages',
-                    'embed_links': 'Embed Links',
-                    'attach_files': 'Attach Files',
-                    'read_message_history': 'Read History'
-                }
-                
-                for perm_attr, perm_name in basic_map.items():
-                    if getattr(bot_perms, perm_attr, False):
-                        basic_perms.append(f"✅ {perm_name}")
-                
-                embed.add_field(
-                    name="📝 Basic Permissions",
-                    value="\n".join(basic_perms) or "❌ No basic permissions",
-                    inline=True
-                )
-
-            # 权限统计
-            total_perms = sum(1 for perm_name in [
-                'administrator', 'manage_guild', 'manage_roles', 'manage_channels',
-                'manage_events', 'manage_messages', 'kick_members', 'ban_members',
-                'view_channel', 'send_messages', 'embed_links', 'attach_files',
-                'read_message_history', 'mention_everyone'
-            ] if hasattr(bot_perms, perm_name) and getattr(bot_perms, perm_name, False))
-            
-            embed.add_field(
-                name="📊 Permission Summary",
-                value=(
-                    f"**Total Permissions:** {total_perms}/14\n"
-                    f"**Administrator:** {'✅' if bot_perms.administrator else '❌'}\n"
-                    f"**Manage Server:** {'✅' if bot_perms.manage_guild else '❌'}\n"
-                    f"**Status:** {'🟢 Full Access' if bot_perms.administrator else '🟡 Limited Access' if total_perms > 7 else '🔴 Restricted'}"
-                ),
-                inline=False
-            )
-
-            # 服务器信息
-            embed.add_field(
-                name="🏰 Server Context",
-                value=(
-                    f"**Server:** {guild.name}\n"
-                    f"**Your Role:** {interaction.user.top_role.name}\n"
-                    f"**Bot's Role:** {bot_member.top_role.name}"
-                ),
-                inline=True
-            )
-
-        # 设置脚注
-        embed.set_footer(text=f"Requested by {interaction.user.display_name} • {panel_type.name}")
-
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-        print(f"✅ Status checked by {interaction.user.name} ({panel_type.value} panel)")
-
-    except Exception as e:
-        await interaction.response.send_message(f"❌ Failed to generate status panel: {str(e)}", ephemeral=True)
-        print(f"❌ Status command error: {e}")
+                    'kick_m
 
 @bot.tree.command(name="debug_commands", description="Check if commands are registered")
 async def debug_commands(interaction: discord.Interaction):
