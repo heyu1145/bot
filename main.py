@@ -53,50 +53,6 @@ def get_multi_ticket_setup_by_id(guild_id, setup_id):
             return config
     return None
 
-def update_multi_ticket_config(guild_id, config):
-    """Update a multi-ticket configuration"""
-    all_configs = load_multi_ticket_configs(guild_id)
-    all_configs = [c for c in all_configs if c['id'] != config['id']]
-    all_configs.append(config)
-    save_multi_ticket_configs(guild_id, all_configs)
-
-async def update_multi_ticket_panel(guild, multi_config):
-    """Update the multi-ticket panel message"""
-    try:
-        panel_channel = await guild.fetch_channel(int(multi_config["panel_channel_id"]))
-        
-        embed = discord.Embed(
-            title=multi_config["panel_title"],
-            description=multi_config["panel_description"],
-            color=discord.Color.blue()
-        )
-        
-        if "ticket_options" in multi_config and multi_config["ticket_options"]:
-            options_text = []
-            for option in multi_config["ticket_options"]:
-                emoji_str = f"{option.get('button_emoji', '')} " if option.get('button_emoji') else ""
-                options_text.append(f"• {emoji_str}**{option['button_label']}**")
-            
-            embed.add_field(
-                name="📋 Available Ticket Types",
-                value="\n".join(options_text),
-                inline=False
-            )
-        else:
-            embed.add_field(
-                name="📋 Available Ticket Types",
-                value="No ticket options configured yet.",
-                inline=False
-            )
-        
-        embed.set_footer(text=f"Panel ID: {multi_config['id']}")
-        
-        view = MultiTicketManagementView(str(guild.id), multi_config["id"])
-        await panel_channel.send(embed=embed, view=view)
-        
-    except Exception as e:
-        print(f"Error updating multi-ticket panel: {e}")
-
 def get_server_data_path(guild_id, filename):
     """Get path to server-specific data file"""
     if not os.path.exists(f"servers/{guild_id}"):
@@ -265,28 +221,6 @@ def has_event_access(interaction: discord.Interaction) -> bool:
 # --------------------------
 # Ticket System Classes
 # --------------------------
-async def generate_transcript(thread: discord.Thread, close_reason: str = None, closer: discord.User = None):
-    transcript = []
-    transcript.append(f"=== Ticket Transcript - {thread.name} ===")
-    transcript.append(f"Created: {thread.created_at.strftime('%Y-%m-%d %H:%M UTC')}")
-    transcript.append(f"Creator: {thread.owner.name} (ID: {thread.owner.id})")
-    transcript.append(f"Closed: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
-    if closer:
-        transcript.append(f"Closed by: {closer.name} (ID: {closer.id})")
-    if close_reason:
-        transcript.append(f"Close Reason: {close_reason}")
-    transcript.append("\n=== Conversation ===\n")
-
-    messages = []
-    async for msg in thread.history(limit=None, oldest_first=True):
-        messages.append(msg)
-
-    for msg in messages:
-        timestamp = msg.created_at.strftime('%H:%M:%S')
-        transcript.append(f"[{timestamp}] {msg.author.name}: {msg.content or '[Attachment/Embed]'}")
-
-    return "\n".join(transcript)
-
 # ==================== MODAL WINDOWS ====================
 class TicketPanelSetupModal(Modal, title="🎫 Create Ticket Panel"):
     panel_title = TextInput(
@@ -309,10 +243,9 @@ class TicketPanelSetupModal(Modal, title="🎫 Create Ticket Panel"):
     def __init__(self, channel: discord.TextChannel):
         super().__init__()
         self.channel = channel
-        self.ticket_options = []
 
     async def on_submit(self, interaction: discord.Interaction):
-        view = PanelSetupView(self.channel, str(self.panel_title), str(self.panel_description), [])
+        view = PanelSetupView(self.channel, str(self.panel_title), str(self.panel_description))
         await interaction.response.send_message(
             "🎛️ **Ticket Panel Setup**\nConfigure options below, then click 'Send Panel' when ready.",
             view=view,
@@ -352,7 +285,6 @@ class AddTicketOptionModal(Modal, title="➕ Add Ticket Option"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        # 存储基本数据，下一步选择频道
         option_data = {
             'button_label': str(self.button_label),
             'button_emoji': str(self.button_emoji) if self.button_emoji.value else None,
@@ -360,21 +292,23 @@ class AddTicketOptionModal(Modal, title="➕ Add Ticket Option"):
             'open_message': str(self.open_message)
         }
         
-        # 通过interaction的extras传递数据
+        view = ChannelSelectView(option_data, interaction.guild)
         await interaction.response.send_message(
             f"✅ Basic info saved! Now select handle channel for: **{self.button_label.value}**",
-            view=ChannelSelectView(option_data),
+            view=view,
             ephemeral=True
         )
 
 # ==================== VIEW COMPONENTS ====================
+# 把这些视图放在模态窗口之后
+
 class PanelSetupView(View):
-    def __init__(self, channel: discord.TextChannel, panel_title: str, panel_description: str, ticket_options: list):
+    def __init__(self, channel: discord.TextChannel, panel_title: str, panel_description: str):
         super().__init__(timeout=300)
         self.channel = channel
         self.panel_title = panel_title
         self.panel_description = panel_description
-        self.ticket_options = ticket_options
+        self.ticket_options = []
 
     @discord.ui.button(label="Add Ticket Option", style=discord.ButtonStyle.primary, emoji="➕", row=0)
     async def add_option(self, interaction: discord.Interaction, button: Button):
@@ -404,7 +338,6 @@ class PanelSetupView(View):
             all_configs.append(config)
             save_multi_ticket_configs(guild_id, all_configs)
 
-            # 创建面板
             embed = discord.Embed(
                 title=self.panel_title,
                 description=self.panel_description,
@@ -441,59 +374,140 @@ class PanelSetupView(View):
         await interaction.delete_original_response()
 
 class ChannelSelectView(View):
-    def __init__(self, option_data: dict):
+    def __init__(self, option_data: dict, guild: discord.Guild):
         super().__init__(timeout=120)
         self.option_data = option_data
+        self.guild = guild
+        
+        self.select = Select(
+            placeholder="Select handle channel...",
+            options=self.get_channel_options(),
+            min_values=1,
+            max_values=1
+        )
+        self.select.callback = self.select_channel_callback
+        self.add_item(self.select)
 
-    @discord.ui.channel_select(
-        placeholder="Select handle channel...",
-        channel_types=[discord.ChannelType.text],
-        min_values=1,
-        max_values=1
-    )
-    async def select_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
-        handle_channel = select.values[0]
+    def get_channel_options(self):
+        options = []
+        for channel in self.guild.text_channels:
+            if isinstance(channel, discord.TextChannel):
+                channel_name = channel.name
+                if len(channel_name) > 25:
+                    channel_name = channel_name[:22] + "..."
+                
+                options.append(SelectOption(
+                    label=channel_name,
+                    value=str(channel.id),
+                    description=f"ID: {channel.id}"[:50]
+                ))
+        return options
+
+    async def select_channel_callback(self, interaction: discord.Interaction):
+        handle_channel_id = self.select.values[0]
+        handle_channel = self.guild.get_channel(int(handle_channel_id))
+        
+        if not handle_channel:
+            await interaction.response.send_message("❌ Channel not found!", ephemeral=True)
+            return
+
         self.option_data['handle_channel_id'] = str(handle_channel.id)
         
         await interaction.response.edit_message(
             content=f"✅ Handle channel set! Now select transcripts channel for **{self.option_data['button_label']}** (optional):",
-            view=TranscriptSelectView(self.option_data)
+            view=TranscriptSelectView(self.option_data, self.guild)
         )
 
 class TranscriptSelectView(View):
-    def __init__(self, option_data: dict):
+    def __init__(self, option_data: dict, guild: discord.Guild):
         super().__init__(timeout=120)
         self.option_data = option_data
+        self.guild = guild
+        
+        self.select = Select(
+            placeholder="Select transcripts channel (optional)...",
+            options=self.get_channel_options(),
+            min_values=0,
+            max_values=1
+        )
+        self.select.callback = self.select_transcript_callback
+        self.add_item(self.select)
+        
+        skip_button = Button(
+            label="Skip Transcripts", 
+            style=discord.ButtonStyle.secondary,
+            custom_id="skip_transcripts"
+        )
+        skip_button.callback = self.skip_transcripts_callback
+        self.add_item(skip_button)
 
-    @discord.ui.channel_select(
-        placeholder="Select transcripts channel (optional)...",
-        channel_types=[discord.ChannelType.text],
-        min_values=0,
-        max_values=1
-    )
-    async def select_transcript(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
-        if select.values:
-            transcript_channel = select.values[0]
+    def get_channel_options(self):
+        options = []
+        for channel in self.guild.text_channels:
+            if isinstance(channel, discord.TextChannel):
+                channel_name = channel.name
+                if len(channel_name) > 25:
+                    channel_name = channel_name[:22] + "..."
+                
+                options.append(SelectOption(
+                    label=channel_name,
+                    value=str(channel.id),
+                    description=f"ID: {channel.id}"[:50]
+                ))
+        return options
+
+    async def select_transcript_callback(self, interaction: discord.Interaction):
+        if self.select.values:
+            transcript_channel_id = self.select.values[0]
+            transcript_channel = self.guild.get_channel(int(transcript_channel_id))
             self.option_data['transcripts_channel_id'] = str(transcript_channel.id)
         else:
             self.option_data['transcripts_channel_id'] = None
         
-        # 完成选项创建
+        await self.finish_option(interaction)
+
+    async def skip_transcripts_callback(self, interaction: discord.Interaction):
+        self.option_data['transcripts_channel_id'] = None
+        await self.finish_option(interaction)
+
+    async def finish_option(self, interaction: discord.Interaction):
         self.option_data['id'] = uuid.uuid4().hex[:6]
         self.option_data['created_at'] = datetime.now(timezone.utc).isoformat()
         
-        # 这里需要将选项添加到面板中
-        # 简化处理：提示用户手动添加
         option_str = f"**{self.option_data['button_label']}** → <#{self.option_data['handle_channel_id']}>"
         if self.option_data['transcripts_channel_id']:
             option_str += f" (Transcripts: <#{self.option_data['transcripts_channel_id']}>)"
         
         await interaction.response.edit_message(
-            content=f"✅ Option created: {option_str}\n\nReturn to the setup panel and click 'Send Panel' when ready.",
+            content=f"✅ Option created: {option_str}\n\nPlease note down these details for the setup panel.",
             view=None
         )
 
+async def generate_transcript(thread: discord.Thread, close_reason: str = None, closer: discord.User = None):
+    transcript = []
+    transcript.append(f"=== Ticket Transcript - {thread.name} ===")
+    transcript.append(f"Created: {thread.created_at.strftime('%Y-%m-%d %H:%M UTC')}")
+    transcript.append(f"Creator: {thread.owner.name} (ID: {thread.owner.id})")
+    transcript.append(f"Closed: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+    if closer:
+        transcript.append(f"Closed by: {closer.name} (ID: {closer.id})")
+    if close_reason:
+        transcript.append(f"Close Reason: {close_reason}")
+    transcript.append("\n=== Conversation ===\n")
+
+    messages = []
+    async for msg in thread.history(limit=None, oldest_first=True):
+        messages.append(msg)
+
+    for msg in messages:
+        timestamp = msg.created_at.strftime('%H:%M:%S')
+        transcript.append(f"[{timestamp}] {msg.author.name}: {msg.content or '[Attachment/Embed]'}")
+
+    return "\n".join(transcript)
+
 # ==================== MULTI-TICKET VIEW ====================
+# 把这个放在其他视图的后面
+
 class MultiTicketView(View):
     def __init__(self, guild_id: str, panel_id: str):
         super().__init__(timeout=None)
@@ -522,7 +536,6 @@ class MultiTicketView(View):
         return callback
 
     async def open_ticket(self, interaction: discord.Interaction, option):
-        # 复用原有的开票逻辑
         user_id = interaction.user.id
         guild_id = self.guild_id
         
@@ -536,16 +549,18 @@ class MultiTicketView(View):
             handle_channel = await interaction.guild.fetch_channel(int(option["handle_channel_id"]))
             title = option["title_format"].replace("{username}", interaction.user.name).replace("{userid}", str(user_id))
             
-            thread = await interaction.channel.create_thread(name=title[:100], type=discord.ChannelType.private_thread)
+            thread = await interaction.channel.create_thread(
+                name=title[:100],
+                type=discord.ChannelType.private_thread,
+                invitable=False
+            )
             
-            # 设置权限
             staff_roles = load_staff_roles(guild_id)
             for role_id in staff_roles:
                 role = interaction.guild.get_role(int(role_id))
                 if role:
                     await thread.set_permissions(role, view_channel=True, send_messages=True)
 
-            # 发送处理消息
             handle_embed = discord.Embed(
                 title=f"New Ticket: {option['button_label']}",
                 description=f"Creator: {interaction.user.mention}\nTicket: {thread.mention}",
@@ -553,11 +568,9 @@ class MultiTicketView(View):
             )
             handle_msg = await handle_channel.send(embed=handle_embed, view=JoinTicketView(str(thread.id), guild_id))
 
-            # 保存票务
             save_active_ticket(guild_id, user_id, str(thread.id), str(handle_msg.id), f"multi_{self.panel_id}_{option['id']}")
             increment_user_ticket_count(guild_id, user_id)
 
-            # 欢迎消息
             welcome_msg = f"Hello {interaction.user.mention}! 👋\n\n**{option['button_label']}**\n{option['open_message']}"
             await thread.send(welcome_msg, view=CloseTicketView(guild_id))
             
@@ -565,7 +578,7 @@ class MultiTicketView(View):
 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
-            
+
 class JoinTicketView(View):
     def __init__(self, thread_id: str, guild_id: str):
         super().__init__(timeout=None)
