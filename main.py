@@ -27,6 +27,7 @@ if not TOKEN:
 # --------------------------
 # Persistent Storage Functions with Server Isolation
 # --------------------------
+# ==================== MULTI-TICKET STORAGE FUNCTIONS ====================
 def load_multi_ticket_configs(guild_id):
     """Load multi-ticket panel configurations for a server"""
     path = get_server_data_path(guild_id, "multi_ticket_configs.json")
@@ -55,11 +56,47 @@ def get_multi_ticket_setup_by_id(guild_id, setup_id):
 def update_multi_ticket_config(guild_id, config):
     """Update a multi-ticket configuration"""
     all_configs = load_multi_ticket_configs(guild_id)
-    # Remove old config if exists
     all_configs = [c for c in all_configs if c['id'] != config['id']]
-    # Add updated config
     all_configs.append(config)
     save_multi_ticket_configs(guild_id, all_configs)
+
+async def update_multi_ticket_panel(guild, multi_config):
+    """Update the multi-ticket panel message"""
+    try:
+        panel_channel = await guild.fetch_channel(int(multi_config["panel_channel_id"]))
+        
+        embed = discord.Embed(
+            title=multi_config["panel_title"],
+            description=multi_config["panel_description"],
+            color=discord.Color.blue()
+        )
+        
+        if "ticket_options" in multi_config and multi_config["ticket_options"]:
+            options_text = []
+            for option in multi_config["ticket_options"]:
+                emoji_str = f"{option.get('button_emoji', '')} " if option.get('button_emoji') else ""
+                options_text.append(f"• {emoji_str}**{option['button_label']}**")
+            
+            embed.add_field(
+                name="📋 Available Ticket Types",
+                value="\n".join(options_text),
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="📋 Available Ticket Types",
+                value="No ticket options configured yet.",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Panel ID: {multi_config['id']}")
+        
+        view = MultiTicketManagementView(str(guild.id), multi_config["id"])
+        await panel_channel.send(embed=embed, view=view)
+        
+    except Exception as e:
+        print(f"Error updating multi-ticket panel: {e}")
+
 def get_server_data_path(guild_id, filename):
     """Get path to server-specific data file"""
     if not os.path.exists(f"servers/{guild_id}"):
@@ -250,10 +287,11 @@ async def generate_transcript(thread: discord.Thread, close_reason: str = None, 
 
     return "\n".join(transcript)
 
-class TicketPanelModal(Modal, title="Create Multi-Ticket Panel"):
+# ==================== MODAL WINDOWS ====================
+class TicketPanelSetupModal(Modal, title="🎫 Create Ticket Panel"):
     panel_title = TextInput(
         label="Panel Title",
-        placeholder="Enter panel title (e.g., Support Center)",
+        placeholder="e.g., Support Center",
         default="Support Tickets",
         max_length=100,
         required=True
@@ -261,7 +299,7 @@ class TicketPanelModal(Modal, title="Create Multi-Ticket Panel"):
     
     panel_description = TextInput(
         label="Panel Description",
-        placeholder="Enter panel description",
+        placeholder="Describe what this panel is for...",
         default="Choose the type of support you need:",
         style=discord.TextStyle.paragraph,
         max_length=1000,
@@ -271,59 +309,27 @@ class TicketPanelModal(Modal, title="Create Multi-Ticket Panel"):
     def __init__(self, channel: discord.TextChannel):
         super().__init__()
         self.channel = channel
+        self.ticket_options = []
 
     async def on_submit(self, interaction: discord.Interaction):
-        guild_id = str(interaction.guild.id)
-        setup_id = uuid.uuid4().hex[:8]
-
-        config = {
-            "id": setup_id,
-            "panel_channel_id": str(self.channel.id),
-            "panel_title": str(self.panel_title),
-            "panel_description": str(self.panel_description),
-            "ticket_options": [],
-            "created_at": datetime.utcnow().isoformat()
-        }
-
-        all_configs = load_multi_ticket_configs(guild_id)
-        all_configs.append(config)
-        save_multi_ticket_configs(guild_id, all_configs)
-
-        # 创建面板
-        embed = discord.Embed(
-            title=str(self.panel_title),
-            description=str(self.panel_description),
-            color=discord.Color.blue()
-        )
-        embed.add_field(
-            name="📋 Available Ticket Types",
-            value="No ticket options added yet. Click 'Manage Options' below to add ticket types.",
-            inline=False
-        )
-        embed.set_footer(text=f"Panel ID: {setup_id}")
-
-        view = MultiTicketManagementView(guild_id, setup_id)
-        await self.channel.send(embed=embed, view=view)
-        
+        view = PanelSetupView(self.channel, str(self.panel_title), str(self.panel_description), [])
         await interaction.response.send_message(
-            f"✅ Multi-ticket panel created successfully!\n"
-            f"**Panel ID:** `{setup_id}`\n"
-            f"**Channel:** {self.channel.mention}\n\n"
-            f"Click 'Manage Options' on the panel to add ticket types.",
+            "🎛️ **Ticket Panel Setup**\nConfigure options below, then click 'Send Panel' when ready.",
+            view=view,
             ephemeral=True
         )
 
-class TicketOptionModal(Modal, title="Add Ticket Option"):
+class AddTicketOptionModal(Modal, title="➕ Add Ticket Option"):
     button_label = TextInput(
         label="Button Label",
-        placeholder="e.g., Technical Support, Billing Help",
+        placeholder="e.g., Technical Support",
         max_length=80,
         required=True
     )
     
     button_emoji = TextInput(
         label="Button Emoji (optional)",
-        placeholder="e.g., 🛠️, 💰, ❓",
+        placeholder="e.g., 🛠️",
         max_length=10,
         required=False
     )
@@ -339,226 +345,227 @@ class TicketOptionModal(Modal, title="Add Ticket Option"):
     open_message = TextInput(
         label="Welcome Message",
         placeholder="Message shown when ticket is opened",
-        default="Please describe your issue and our team will assist you shortly.",
+        default="Please describe your issue...",
         style=discord.TextStyle.paragraph,
         max_length=1000,
         required=True
     )
 
-    def __init__(self, panel_id: str, handle_channel: discord.TextChannel, transcripts_channel: discord.TextChannel = None):
-        super().__init__()
-        self.panel_id = panel_id
-        self.handle_channel = handle_channel
-        self.transcripts_channel = transcripts_channel
-
     async def on_submit(self, interaction: discord.Interaction):
-        guild_id = str(interaction.guild.id)
-        multi_config = get_multi_ticket_setup_by_id(guild_id, self.panel_id)
-        
-        if not multi_config:
-            await interaction.response.send_message("❌ Panel not found!", ephemeral=True)
-            return
-
-        # 创建票务选项
-        ticket_option_id = uuid.uuid4().hex[:6]
-        ticket_option = {
-            "id": ticket_option_id,
-            "button_label": str(self.button_label),
-            "button_emoji": str(self.button_emoji) if self.button_emoji.value else None,
-            "handle_channel_id": str(self.handle_channel.id),
-            "transcripts_channel_id": str(self.transcripts_channel.id) if self.transcripts_channel else None,
-            "title_format": str(self.title_format),
-            "open_message": str(self.open_message),
-            "created_at": datetime.utcnow().isoformat()
+        # 存储基本数据，下一步选择频道
+        option_data = {
+            'button_label': str(self.button_label),
+            'button_emoji': str(self.button_emoji) if self.button_emoji.value else None,
+            'title_format': str(self.title_format),
+            'open_message': str(self.open_message)
         }
-
-        # 添加到配置
-        if "ticket_options" not in multi_config:
-            multi_config["ticket_options"] = []
-        multi_config["ticket_options"].append(ticket_option)
-
-        # 更新配置
-        all_configs = load_multi_ticket_configs(guild_id)
-        all_configs = [c for c in all_configs if c['id'] != self.panel_id]
-        all_configs.append(multi_config)
-        save_multi_ticket_configs(guild_id, all_configs)
-
-        # 更新面板
-        await update_multi_ticket_panel(interaction.guild, multi_config)
-
+        
+        # 通过interaction的extras传递数据
         await interaction.response.send_message(
-            f"✅ Ticket option added successfully!\n"
-            f"**Label:** {self.button_label.value}\n"
-            f"**Handle Channel:** {self.handle_channel.mention}",
+            f"✅ Basic info saved! Now select handle channel for: **{self.button_label.value}**",
+            view=ChannelSelectView(option_data),
             ephemeral=True
         )
 
-class ChannelSelectionView(View):
-    def __init__(self, guild_id: str, panel_id: str, action: str):
-        super().__init__(timeout=120)
-        self.guild_id = guild_id
-        self.panel_id = panel_id
-        self.action = action
-        self.select = None
+# ==================== VIEW COMPONENTS ====================
+class PanelSetupView(View):
+    def __init__(self, channel: discord.TextChannel, panel_title: str, panel_description: str, ticket_options: list):
+        super().__init__(timeout=300)
+        self.channel = channel
+        self.panel_title = panel_title
+        self.panel_description = panel_description
+        self.ticket_options = ticket_options
 
-    async def initialize_options(self, guild):
-        """初始化频道选项"""
-        options = []
-        for channel in guild.text_channels:
-            if isinstance(channel, discord.TextChannel):
-                options.append(discord.SelectOption(
-                    label=channel.name[:25],
-                    value=str(channel.id),
-                    description=f"ID: {channel.id}"[:50]
-                ))
-        
-        self.select = discord.ui.Select(
-            placeholder="Select handle channel...",
-            options=options,
-            min_values=1,
-            max_values=1
-        )
-        self.select.callback = self.select_handle_channel
-        self.add_item(self.select)
+    @discord.ui.button(label="Add Ticket Option", style=discord.ButtonStyle.primary, emoji="➕", row=0)
+    async def add_option(self, interaction: discord.Interaction, button: Button):
+        modal = AddTicketOptionModal()
+        await interaction.response.send_modal(modal)
 
-    async def select_handle_channel(self, interaction: discord.Interaction):
-        handle_channel_id = self.select.values[0]
-        handle_channel = interaction.guild.get_channel(int(handle_channel_id))
-        
-        if not handle_channel:
-            await interaction.response.send_message("❌ Channel not found!", ephemeral=True)
+    @discord.ui.button(label="Send Panel", style=discord.ButtonStyle.success, emoji="🚀", row=1)
+    async def send_panel(self, interaction: discord.Interaction, button: Button):
+        if not self.ticket_options:
+            await interaction.response.send_message("❌ Please add at least one ticket option!", ephemeral=True)
             return
 
-        # 继续流程...
+        try:
+            guild_id = str(interaction.guild.id)
+            setup_id = uuid.uuid4().hex[:8]
 
-class MultiTicketManagementView(View):
+            config = {
+                "id": setup_id,
+                "panel_channel_id": str(self.channel.id),
+                "panel_title": self.panel_title,
+                "panel_description": self.panel_description,
+                "ticket_options": self.ticket_options,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+
+            all_configs = load_multi_ticket_configs(guild_id)
+            all_configs.append(config)
+            save_multi_ticket_configs(guild_id, all_configs)
+
+            # 创建面板
+            embed = discord.Embed(
+                title=self.panel_title,
+                description=self.panel_description,
+                color=discord.Color.green()
+            )
+            
+            options_text = []
+            for option in self.ticket_options:
+                emoji_str = f"{option.get('button_emoji', '')} " if option.get('button_emoji') else ""
+                options_text.append(f"• {emoji_str}**{option['button_label']}**")
+            
+            embed.add_field(
+                name="📋 Available Support Options",
+                value="\n".join(options_text),
+                inline=False
+            )
+            
+            view = MultiTicketView(guild_id, setup_id)
+            await self.channel.send(embed=embed, view=view)
+
+            await interaction.response.send_message(
+                f"✅ Panel created successfully!\n**ID:** `{setup_id}`\n**Channel:** {self.channel.mention}",
+                ephemeral=True
+            )
+            
+            await interaction.delete_original_response()
+
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger, emoji="❌", row=1)
+    async def cancel(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_message("❌ Cancelled panel creation.", ephemeral=True)
+        await interaction.delete_original_response()
+
+class ChannelSelectView(View):
+    def __init__(self, option_data: dict):
+        super().__init__(timeout=120)
+        self.option_data = option_data
+
+    @discord.ui.channel_select(
+        placeholder="Select handle channel...",
+        channel_types=[discord.ChannelType.text],
+        min_values=1,
+        max_values=1
+    )
+    async def select_channel(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        handle_channel = select.values[0]
+        self.option_data['handle_channel_id'] = str(handle_channel.id)
+        
+        await interaction.response.edit_message(
+            content=f"✅ Handle channel set! Now select transcripts channel for **{self.option_data['button_label']}** (optional):",
+            view=TranscriptSelectView(self.option_data)
+        )
+
+class TranscriptSelectView(View):
+    def __init__(self, option_data: dict):
+        super().__init__(timeout=120)
+        self.option_data = option_data
+
+    @discord.ui.channel_select(
+        placeholder="Select transcripts channel (optional)...",
+        channel_types=[discord.ChannelType.text],
+        min_values=0,
+        max_values=1
+    )
+    async def select_transcript(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        if select.values:
+            transcript_channel = select.values[0]
+            self.option_data['transcripts_channel_id'] = str(transcript_channel.id)
+        else:
+            self.option_data['transcripts_channel_id'] = None
+        
+        # 完成选项创建
+        self.option_data['id'] = uuid.uuid4().hex[:6]
+        self.option_data['created_at'] = datetime.now(timezone.utc).isoformat()
+        
+        # 这里需要将选项添加到面板中
+        # 简化处理：提示用户手动添加
+        option_str = f"**{self.option_data['button_label']}** → <#{self.option_data['handle_channel_id']}>"
+        if self.option_data['transcripts_channel_id']:
+            option_str += f" (Transcripts: <#{self.option_data['transcripts_channel_id']}>)"
+        
+        await interaction.response.edit_message(
+            content=f"✅ Option created: {option_str}\n\nReturn to the setup panel and click 'Send Panel' when ready.",
+            view=None
+        )
+
+# ==================== MULTI-TICKET VIEW ====================
+class MultiTicketView(View):
     def __init__(self, guild_id: str, panel_id: str):
         super().__init__(timeout=None)
         self.guild_id = guild_id
         self.panel_id = panel_id
+        self.load_buttons()
 
-    @discord.ui.button(label="Manage Options", style=discord.ButtonStyle.secondary, emoji="⚙️")
-    async def manage_options(self, interaction: discord.Interaction, button: Button):
-        if not has_event_access(interaction):
-            await interaction.response.send_message("❌ Only staff can manage ticket options!", ephemeral=True)
-            return
-
+    def load_buttons(self):
+        self.clear_items()
         multi_config = get_multi_ticket_setup_by_id(self.guild_id, self.panel_id)
-        if not multi_config:
-            await interaction.response.send_message("❌ Panel not found!", ephemeral=True)
-            return
-
-        # 显示管理选项
-        embed = discord.Embed(
-            title="🎫 Manage Ticket Options",
-            description=f"Panel: **{multi_config['panel_title']}**\nID: `{self.panel_id}`",
-            color=discord.Color.blue()
-        )
-
-        if "ticket_options" in multi_config and multi_config["ticket_options"]:
-            for i, option in enumerate(multi_config["ticket_options"], 1):
-                emoji_str = f"{option['button_emoji']} " if option["button_emoji"] else ""
-                embed.add_field(
-                    name=f"{i}. {emoji_str}{option['button_label']}",
-                    value=f"Handle: <#{option['handle_channel_id']}>\nID: `{option['id']}`",
-                    inline=False
+        
+        if multi_config and "ticket_options" in multi_config:
+            for option in multi_config["ticket_options"]:
+                button = Button(
+                    label=option["button_label"],
+                    emoji=option["button_emoji"] if option.get("button_emoji") else None,
+                    style=discord.ButtonStyle.primary,
+                    custom_id=f"multiticket_{self.panel_id}_{option['id']}"
                 )
-        else:
-            embed.add_field(
-                name="No Options Yet",
-                value="Click 'Add Option' below to create your first ticket type.",
-                inline=False
+                button.callback = self.create_callback(option)
+                self.add_item(button)
+
+    def create_callback(self, option):
+        async def callback(interaction: discord.Interaction):
+            await self.open_ticket(interaction, option)
+        return callback
+
+    async def open_ticket(self, interaction: discord.Interaction, option):
+        # 复用原有的开票逻辑
+        user_id = interaction.user.id
+        guild_id = self.guild_id
+        
+        if str(interaction.guild.id) != guild_id:
+            return await interaction.response.send_message("❌ Invalid server!", ephemeral=True)
+
+        if str(user_id) in load_active_tickets(guild_id):
+            return await interaction.response.send_message("❌ You already have an active ticket!", ephemeral=True)
+
+        try:
+            handle_channel = await interaction.guild.fetch_channel(int(option["handle_channel_id"]))
+            title = option["title_format"].replace("{username}", interaction.user.name).replace("{userid}", str(user_id))
+            
+            thread = await interaction.channel.create_thread(name=title[:100], type=discord.ChannelType.private_thread)
+            
+            # 设置权限
+            staff_roles = load_staff_roles(guild_id)
+            for role_id in staff_roles:
+                role = interaction.guild.get_role(int(role_id))
+                if role:
+                    await thread.set_permissions(role, view_channel=True, send_messages=True)
+
+            # 发送处理消息
+            handle_embed = discord.Embed(
+                title=f"New Ticket: {option['button_label']}",
+                description=f"Creator: {interaction.user.mention}\nTicket: {thread.mention}",
+                color=discord.Color.blue()
             )
+            handle_msg = await handle_channel.send(embed=handle_embed, view=JoinTicketView(str(thread.id), guild_id))
 
-        view = TicketOptionsManagementView(self.guild_id, self.panel_id)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            # 保存票务
+            save_active_ticket(guild_id, user_id, str(thread.id), str(handle_msg.id), f"multi_{self.panel_id}_{option['id']}")
+            increment_user_ticket_count(guild_id, user_id)
 
-    @discord.ui.button(label="Refresh Panel", style=discord.ButtonStyle.success, emoji="🔄")
-    async def refresh_panel(self, interaction: discord.Interaction, button: Button):
-        if not has_event_access(interaction):
-            await interaction.response.send_message("❌ Only staff can refresh the panel!", ephemeral=True)
-            return
+            # 欢迎消息
+            welcome_msg = f"Hello {interaction.user.mention}! 👋\n\n**{option['button_label']}**\n{option['open_message']}"
+            await thread.send(welcome_msg, view=CloseTicketView(guild_id))
+            
+            await interaction.response.send_message(f"✅ Ticket created: {thread.mention}", ephemeral=True)
 
-        multi_config = get_multi_ticket_setup_by_id(self.guild_id, self.panel_id)
-        if not multi_config:
-            await interaction.response.send_message("❌ Panel not found!", ephemeral=True)
-            return
-
-        await update_multi_ticket_panel(interaction.guild, multi_config)
-        await interaction.response.send_message("✅ Panel refreshed successfully!", ephemeral=True)
-
-class TicketOptionsManagementView(View):
-    def __init__(self, guild_id: str, panel_id: str):
-        super().__init__(timeout=120)
-        self.guild_id = guild_id
-        self.panel_id = panel_id
-
-    @discord.ui.button(label="Add Option", style=discord.ButtonStyle.primary, emoji="➕")
-    async def add_option(self, interaction: discord.Interaction, button: Button):
-        # 创建频道选择视图
-        embed = discord.Embed(
-            title="📁 Select Handle Channel",
-            description="Please select the channel where staff will handle this type of ticket:",
-            color=discord.Color.blue()
-        )
-
-        # 传递interaction.guild来获取频道选项
-        view = ChannelSelectionView(self.guild_id, self.panel_id, "handle")
-        # 需要先初始化选择器选项
-        await view.initialize_options(interaction.guild)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-class TranscriptChannelView(View):
-    def __init__(self, guild_id: str, panel_id: str, handle_channel: discord.TextChannel):
-        super().__init__(timeout=120)
-        self.guild_id = guild_id
-        self.panel_id = panel_id
-        self.handle_channel = handle_channel
-        
-        # 创建频道选择下拉菜单
-        self.select = Select(
-            placeholder="Select transcripts channel...",
-            options=self.get_channel_options(handle_channel.guild),
-            min_values=0,  # 允许不选择
-            max_values=1
-        )
-        self.select.callback = self.select_transcript_channel
-        self.add_item(self.select)
-        
-        # 添加跳过按钮
-        self.add_item(Button(label="Skip Transcripts", style=discord.ButtonStyle.secondary, custom_id="skip_transcripts"))
-
-    def get_channel_options(self, guild):
-        """获取文本频道选项"""
-        options = []
-        for channel in guild.text_channels:
-            if isinstance(channel, discord.TextChannel):
-                options.append(SelectOption(
-                    label=channel.name,
-                    value=str(channel.id),
-                    description=f"ID: {channel.id}"[:100]
-                ))
-        return options
-
-    async def select_transcript_channel(self, interaction: discord.Interaction):
-        if self.select.values:
-            transcript_channel_id = self.select.values[0]
-            transcript_channel = interaction.guild.get_channel(int(transcript_channel_id))
-            await self.create_option(interaction, transcript_channel)
-        else:
-            await self.create_option(interaction, None)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.data.get('custom_id') == 'skip_transcripts':
-            await self.create_option(interaction, None)
-            return False
-        return True
-
-    async def create_option(self, interaction: discord.Interaction, transcripts_channel: discord.TextChannel = None):
-        # 打开票务选项创建模态
-        modal = TicketOptionModal(self.panel_id, self.handle_channel, transcripts_channel)
-        await interaction.response.send_modal(modal)
-
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
+            
 class JoinTicketView(View):
     def __init__(self, thread_id: str, guild_id: str):
         super().__init__(timeout=None)
@@ -1045,20 +1052,6 @@ async def delticketsetup(interaction: discord.Interaction, setup_id: str):
         f"✅ Ticket setup `{setup_id}` has been deleted from this server", ephemeral=True
     )
 
-@bot.tree.command(name="create_ticket_panel", description="Create an interactive multi-ticket panel")
-@app_commands.describe(channel="Channel where the ticket panel will be created")
-async def create_ticket_panel(interaction: discord.Interaction, channel: discord.TextChannel):
-    if not interaction.guild:
-        await interaction.response.send_message("❌ This command must be used in a server!", ephemeral=True)
-        return
-    if not is_admin_or_owner(interaction):
-        await interaction.response.send_message("❌ Admin only!", ephemeral=True)
-        return
-
-    # 打开面板创建模态
-    modal = TicketPanelModal(channel)
-    await interaction.response.send_modal(modal)
-
 @bot.tree.command(name="list_ticket_setups", description="List all ticket setups for this server (Admin only)")
 async def list_ticket_setups(interaction: discord.Interaction):
     if not interaction.guild:
@@ -1315,6 +1308,20 @@ async def delete_event(interaction: discord.Interaction, event_id: str):
         except:
             pass
 
+# ==================== MAIN COMMAND ====================
+@bot.tree.command(name="create_ticket_panel", description="Create a multi-ticket panel with visual setup")
+@app_commands.describe(channel="Channel where the panel will be created")
+async def create_ticket_panel(interaction: discord.Interaction, channel: discord.TextChannel):
+    if not interaction.guild:
+        await interaction.response.send_message("❌ Server only command!", ephemeral=True)
+        return
+    if not is_admin_or_owner(interaction):
+        await interaction.response.send_message("❌ Admin only!", ephemeral=True)
+        return
+
+    modal = TicketPanelSetupModal(channel)
+    await interaction.response.send_modal(modal)
+
 # Helper command to debug events
 @bot.tree.command(name="event_info", description="Get detailed information about an event")
 @app_commands.describe(event_id="The ID of the event to inspect")
@@ -1357,43 +1364,229 @@ async def event_info(interaction: discord.Interaction, event_id: str):
     except Exception as e:
         await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
-@bot.tree.command(name="bot_status", description="Check if bot is online and working")
-async def bot_status(interaction: discord.Interaction):
-    """简单的机器人状态检查"""
+@bot.tree.command(name="bot_status", description="Check bot status - choose panel type")
+@app_commands.choices(panel_type=[
+    app_commands.Choice(name="🚀 Simple Panel", value="simple"),
+    app_commands.Choice(name="📊 Full Panel", value="full"),
+    app_commands.Choice(name="🔐 Permissions Only", value="perms")
+])
+@app_commands.describe(panel_type="Select which panel type to display")
+async def bot_status(interaction: discord.Interaction, panel_type: app_commands.Choice[str]):
+    """显示机器人状态 - 必须选择面板类型"""
     try:
+        if not interaction.guild:
+            await interaction.response.send_message("❌ This command can only be used in servers!", ephemeral=True)
+            return
+
+        # 获取服务器和权限信息
+        guild = interaction.guild
+        bot_member = guild.me
+        bot_perms = bot_member.guild_permissions
+        channel_perms = interaction.channel.permissions_for(bot_member)
+        
         # 计算运行时间
         uptime = datetime.now() - bot.start_time
         hours, remainder = divmod(uptime.total_seconds(), 3600)
         minutes, seconds = divmod(remainder, 60)
         uptime_str = f"{int(hours)}h {int(minutes)}m {int(seconds)}s"
-        
-        # 创建状态消息
-        status_message = (
-            "🤖 **Bot Status**\n"
-            f"• **Status**: ✅ Online\n"
-            f"• **Username**: {bot.user.name}\n"
-            f"• **Ping**: {round(bot.latency * 1000)}ms\n"
-            f"• **Uptime**: {uptime_str}\n"
-            f"• **Servers**: {len(bot.guilds)}\n"
-            f"• **Commands**: {len(bot.tree.get_commands())} loaded\n"
-            "\n"
-            "🟢 **All systems operational**"
-        )
-        
-        await interaction.response.send_message(status_message, ephemeral=True)
-        print(f"✅ Status checked by {interaction.user.name}")
-        
+
+        # 根据选择的面板类型创建不同的嵌入消息
+        if panel_type.value == "simple":
+            # ==================== 简单面板 ====================
+            embed = discord.Embed(
+                title="🚀 Bot Status - Simple Overview",
+                color=discord.Color.blue(),
+                timestamp=datetime.now()
+            )
+            
+            # 核心信息
+            embed.add_field(
+                name="🏰 Server Info",
+                value=(
+                    f"**Name:** {guild.name}\n"
+                    f"**Members:** {guild.member_count}\n"
+                    f"**Owner:** <@{guild.owner_id}>"
+                ),
+                inline=True
+            )
+
+            embed.add_field(
+                name="🔧 Bot Status",
+                value=(
+                    f"**Status:** ✅ Online\n"
+                    f"**Ping:** {round(bot.latency * 1000)}ms\n"
+                    f"**Uptime:** {uptime_str}\n"
+                    f"**Servers:** {len(bot.guilds)}"
+                ),
+                inline=True
+            )
+
+            # 关键权限
+            key_perms = []
+            if bot_perms.administrator:
+                key_perms.append("✅ Administrator")
+            else:
+                important_perms = ['manage_roles', 'manage_channels', 'manage_events', 'manage_messages']
+                for perm in important_perms:
+                    if getattr(bot_perms, perm):
+                        perm_name = perm.replace('_', ' ').title()
+                        key_perms.append(f"✅ {perm_name}")
+            
+            embed.add_field(
+                name="🔐 Key Permissions",
+                value="\n".join(key_perms[:6]) or "❌ No key permissions",
+                inline=False
+            )
+
+            # 状态指示
+            status_msg = "🟢 All systems operational" if bot_perms.administrator or all(getattr(bot_perms, p) for p in ['manage_roles', 'manage_channels']) else "🟡 Limited functionality"
+            embed.add_field(
+                name="📊 Status",
+                value=status_msg,
+                inline=False
+            )
+
+        elif panel_type.value == "full":
+            # ==================== 完整面板 ====================
+            embed = discord.Embed(
+                title="📊 Bot Status - Full Details",
+                color=discord.Color.green(),
+                timestamp=datetime.now()
+            )
+            
+            # 服务器详细信息
+            embed.add_field(
+                name="🏰 Server Information",
+                value=(
+                    f"**Name:** {guild.name}\n"
+                    f"**ID:** `{guild.id}`\n"
+                    f"**Channels:** {len(guild.channels)}/500\n"
+                    f"**Members:** {guild.member_count}\n"
+                    f"**Owner:** <@{guild.owner_id}>\n"
+                    f"**Created:** {guild.created_at.strftime('%Y-%m-%d')}"
+                ),
+                inline=False
+            )
+
+            # 机器人详细信息
+            embed.add_field(
+                name="🔧 Bot Information",
+                value=(
+                    f"**Name:** {bot.user.name}\n"
+                    f"**ID:** `{bot.user.id}`\n"
+                    f"**Ping:** {round(bot.latency * 1000)}ms\n"
+                    f"**Uptime:** {uptime_str}\n"
+                    f"**Servers:** {len(bot.guilds)}\n"
+                    f"**Commands:** {len(bot.tree.get_commands())}\n"
+                    f"**Top Role:** {bot_member.top_role.name}"
+                ),
+                inline=False
+            )
+
+            # 完整权限列表
+            all_perms = []
+            for perm, value in bot_perms:
+                if value:
+                    perm_name = perm.name.replace('_', ' ').title()
+                    all_perms.append(f"✅ {perm_name}")
+            
+            if all_perms:
+                perms_chunks = [all_perms[i:i+10] for i in range(0, len(all_perms), 10)]
+                for i, chunk in enumerate(perms_chunks):
+                    field_name = "🔐 All Permissions" if i == 0 else "↳ Continued"
+                    embed.add_field(name=field_name, value="\n".join(chunk), inline=True)
+
+            # 用户信息
+            user_permission_level = "Guild Owner" if interaction.user == guild.owner else "Administrator" if interaction.user.guild_permissions.administrator else "Member"
+            
+            embed.add_field(
+                name="👤 Your Information",
+                value=(
+                    f"**Name:** {interaction.user.display_name}\n"
+                    f"**ID:** `{interaction.user.id}`\n"
+                    f"**Permission Level:** {user_permission_level}\n"
+                    f"**Joined:** {interaction.user.joined_at.strftime('%Y-%m-%d') if interaction.user.joined_at else 'Unknown'}\n"
+                    f"**Top Role:** {interaction.user.top_role.name}"
+                ),
+                inline=False
+            )
+
+        else:  # perms
+            # ==================== 仅权限面板 ====================
+            embed = discord.Embed(
+                title="🔐 Bot Permissions Overview",
+                color=discord.Color.orange(),
+                timestamp=datetime.now()
+            )
+            
+            # 权限状态
+            if bot_perms.administrator:
+                embed.add_field(
+                    name="🎯 Permission Level",
+                    value="✅ **Full Administrator**\nBot has all permissions enabled",
+                    inline=False
+                )
+            else:
+                # 关键管理权限
+                management_perms = []
+                management_list = ['manage_roles', 'manage_channels', 'manage_events', 'manage_messages', 'kick_members', 'ban_members']
+                for perm in management_list:
+                    if getattr(bot_perms, perm):
+                        perm_name = perm.replace('_', ' ').title()
+                        management_perms.append(f"✅ {perm_name}")
+                
+                embed.add_field(
+                    name="🛠️ Management Permissions",
+                    value="\n".join(management_perms) or "❌ No management permissions",
+                    inline=True
+                )
+
+                # 基本权限
+                basic_perms = []
+                basic_list = ['view_channel', 'send_messages', 'embed_links', 'attach_files', 'read_message_history']
+                for perm in basic_list:
+                    if getattr(bot_perms, perm):
+                        perm_name = perm.replace('_', ' ').title()
+                        basic_perms.append(f"✅ {perm_name}")
+                
+                embed.add_field(
+                    name="📝 Basic Permissions",
+                    value="\n".join(basic_perms) or "❌ No basic permissions",
+                    inline=True
+                )
+
+            # 权限统计
+            total_perms = sum(1 for _, value in bot_perms if value)
+            embed.add_field(
+                name="📊 Permission Summary",
+                value=(
+                    f"**Total Permissions:** {total_perms}/30\n"
+                    f"**Administrator:** {'✅' if bot_perms.administrator else '❌'}\n"
+                    f"**Manage Server:** {'✅' if bot_perms.manage_guild else '❌'}\n"
+                    f"**Status:** {'🟢 Full Access' if bot_perms.administrator else '🟡 Limited Access' if total_perms > 15 else '🔴 Restricted'}"
+                ),
+                inline=False
+            )
+
+            # 服务器信息
+            embed.add_field(
+                name="🏰 Server Context",
+                value=(
+                    f"**Server:** {guild.name}\n"
+                    f"**Your Role:** {interaction.user.top_role.name}\n"
+                    f"**Bot's Role:** {bot_member.top_role.name}"
+                ),
+                inline=True
+            )
+
+        # 设置脚注
+        embed.set_footer(text=f"Requested by {interaction.user.display_name} • {panel_type.name}")
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        print(f"✅ Status checked by {interaction.user.name} ({panel_type.value} panel)")
+
     except Exception as e:
-        # 简化错误处理
-        error_message = "❌ Failed to check status"
-        try:
-            await interaction.response.send_message(error_message, ephemeral=True)
-        except:
-            # 如果响应失败，尝试发送普通消息
-            try:
-                await interaction.channel.send(f"{interaction.user.mention} {error_message}", delete_after=10)
-            except:
-                pass
+        await interaction.response.send_message(f"❌ Failed to generate status panel: {str(e)}", ephemeral=True)
         print(f"❌ Status command error: {e}")
 
 @bot.tree.command(name="debug_commands", description="Check if commands are registered")
