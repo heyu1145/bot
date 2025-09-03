@@ -27,6 +27,39 @@ if not TOKEN:
 # --------------------------
 # Persistent Storage Functions with Server Isolation
 # --------------------------
+def load_multi_ticket_configs(guild_id):
+    """Load multi-ticket panel configurations for a server"""
+    path = get_server_data_path(guild_id, "multi_ticket_configs.json")
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        with open(path, 'w') as f:
+            json.dump([], f)
+        return []
+
+def save_multi_ticket_configs(guild_id, configs):
+    """Save multi-ticket panel configurations"""
+    path = get_server_data_path(guild_id, "multi_ticket_configs.json")
+    with open(path, 'w') as f:
+        json.dump(configs, f, indent=2)
+
+def get_multi_ticket_setup_by_id(guild_id, setup_id):
+    """Get a specific multi-ticket setup by ID"""
+    configs = load_multi_ticket_configs(guild_id)
+    for config in configs:
+        if config['id'] == setup_id:
+            return config
+    return None
+
+def update_multi_ticket_config(guild_id, config):
+    """Update a multi-ticket configuration"""
+    all_configs = load_multi_ticket_configs(guild_id)
+    # Remove old config if exists
+    all_configs = [c for c in all_configs if c['id'] != config['id']]
+    # Add updated config
+    all_configs.append(config)
+    save_multi_ticket_configs(guild_id, all_configs)
 def get_server_data_path(guild_id, filename):
     """Get path to server-specific data file"""
     if not os.path.exists(f"servers/{guild_id}"):
