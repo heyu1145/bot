@@ -5,7 +5,7 @@ from discord.ui import Button, View, TextInput, Modal, Select
 import os
 import pytz
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta,timezone
 import json
 import re
 import asyncio
