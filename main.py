@@ -928,56 +928,53 @@ async def ping(interaction: discord.Interaction):
         ephemeral=True
     )
     
-@bot.tree.command(name="sendmessage", description="Send a message with optional image/file to a channel (Staff only)")
+@bot.tree.command(name="sendmessage", description="Send embed message")
 @app_commands.describe(
     channel="The channel to send the message to",
-    message="Message content (can include links)",
-    file="Optional: Image or file to upload (max 8MB)"
+    title="Embed title(optional)",
+    message="Embed message",
+    color="Embed color (hex code without #, e.g., FF0000)",
+    footer="Embed footer text (optional)",
+    image_url="Image URL (optional)"
 )
-async def sendmessage(
+async def send_embed(
     interaction: discord.Interaction,
     channel: discord.TextChannel,
+    title: str = None,
     message: str = None,
-    file: discord.Attachment = None
+    color: str = "0000FF",
+    footer: str = None,
+    image_url: str = None
 ):
+    """发送简单的嵌入消息"""
     if not interaction.guild:
-        return await interaction.response.send_message("❌ This command must be used in a server!", ephemeral=True)
+        await interaction.response.send_message("❌ Server only command!", ephemeral=True)
+        return
 
     if not has_event_access(interaction):
-        return await interaction.response.send_message(
-            "❌ Only staff, administrators, or owners can use this command!", 
-            ephemeral=True
-        )
-
-    if not message and not file:
-        return await interaction.response.send_message(
-            "❌ Please provide either a message, a file, or both!", 
-            ephemeral=True
-        )
-
+        await interaction.response.send_message("❌ Permission denied!", ephemeral=True)
+        return
+    
     try:
-        discord_file = None
-        if file:
-            if file.size > 8 * 1024 * 1024:
-                return await interaction.response.send_message(
-                    "❌ File too large! Max size is 8MB.", 
-                    ephemeral=True
-                )
-
-            file_bytes = await file.read()
-            discord_file = discord.File(fp=file_bytes, filename=file.filename)
-
-        await channel.send(content=message, file=discord_file)
-        await interaction.response.send_message(
-            f"✅ Message sent to {channel.mention}", 
-            ephemeral=True
+        embed = discord.Embed(
+        title=title[:256] or "",
+            description=message[:4096] or "",
+            color=discord.Color(int(color, 16)) if color != "0000FF" else discord.Color.default()
         )
 
+        if footer:
+            embed.set_footer(text=footer[:2048])
+        
+        if image_url:
+            embed.set_image(url=image_url)
+
+        await channel.send(embed=embed)
+        await interaction.response.send_message(f"✅ Embed sent to {channel.mention}", ephemeral=True)
+
+    except ValueError:
+        await interaction.response.send_message("❌ Invalid color format! Use hex like FF0000", ephemeral=True)
     except Exception as e:
-        await interaction.response.send_message(
-            f"❌ Failed to send message: {str(e)}", 
-            ephemeral=True
-        )
+        await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
 
 @bot.tree.command(name="setup_ticket", description="Set up a ticket system with unique ID (Admin only)")
 @app_commands.describe(
