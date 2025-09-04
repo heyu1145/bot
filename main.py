@@ -9,6 +9,8 @@ from datetime import datetime, timedelta,timezone
 import json
 import re
 import asyncio
+import sqlite3
+from pathlib import Path
 from keep_alive import keep_alive
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -21,12 +23,44 @@ logger.setLevel(logging.INFO)
 # --------------------------
 TOKEN = os.getenv('TOKEN')
 if not TOKEN:
-    print("❌ ERROR: No Discord token found! Set DISCORD_TOKEN in .env")
+    logger.ERROR("❌ ERROR: No Discord token found! Set DISCORD_TOKEN in .env")
     exit(1)
 
 # --------------------------
 # Persistent Storage Functions with Server Isolation
 # --------------------------
+# ==================== TRUSTED USER SYSTEM ====================
+def load_trusted_users() -> List[int]:
+    """Load trusted users from file"""
+    try:
+        if os.path.exists("trusted_users.json"):
+            with open("trusted_users.json", "r") as f:
+                return json.load(f)
+    except:
+        pass
+    return []
+
+def save_trusted_users(trusted_users: List[int]) -> bool:
+    """Save trusted users to file"""
+    try:
+        with open("trusted_users.json", "w") as f:
+            json.dump(trusted_users, f, indent=2)
+        return True
+    except:
+        return False
+
+def is_bot_owner(user_id: int) -> bool:
+    """Check if user is bot owner"""
+    return user_id == OWNER_USER_ID # Replace with your actual user ID
+
+def is_trusted_user(user_id: int) -> bool:
+    """Check if user is trusted"""
+    trusted_users = load_trusted_users()
+    return is_bot_owner(user_id) or user_id in trusted_users
+
+def has_data_access(interaction: discord.Interaction) -> bool:
+    """Check if user has data access permissions"""
+    return is_trusted_user(interaction.user.id)
 # ==================== MULTI-TICKET STORAGE FUNCTIONS ====================
 def load_multi_ticket_configs(guild_id):
     """Load multi-ticket panel configurations for a server"""
@@ -927,8 +961,129 @@ async def ping(interaction: discord.Interaction):
         f"🏓 Pong! Response time: {latency}ms", 
         ephemeral=True
     )
+
+# ==================== TRUSTED USER COMMANDS ====================
+@bot.tree.command(name="add_trusted_user", description="Add a trusted user (Bot Owner Only)")
+@app_commands.describe(user="The user to add as trusted")
+async def add_trusted_user(interaction: discord.Interaction, user: discord.User):
+    """Add a user to the trusted list"""
+    if not is_bot_owner(interaction.user.id):
+        return await interaction.response.send_message("❌ Only the bot owner can use this command!", ephemeral=True)
     
-@bot.tree.command(name="sendmessage", description="Send embed message")
+    trusted_users = load_trusted_users()
+    if user.id in trusted_users:
+        return await interaction.response.send_message(f"❌ {user.mention} is already trusted!", ephemeral=True)
+    
+    trusted_users.append(user.id)
+    save_trusted_users(trusted_users)
+    await interaction.response.send_message(f"✅ Added {user.mention} to trusted users!", ephemeral=True)
+
+@bot.tree.command(name="remove_trusted_user", description="Remove a trusted user (Bot Owner Only)")
+@app_commands.describe(user="The user to remove from trusted")
+async def remove_trusted_user(interaction: discord.Interaction, user: discord.User):
+    """Remove a user from the trusted list"""
+    if not is_bot_owner(interaction.user.id):
+        return await interaction.response.send_message("❌ Only the bot owner can use this command!", ephemeral=True)
+    
+    trusted_users = load_trusted_users()
+    if user.id not in trusted_users:
+        return await interaction.response.send_message(f"❌ {user.mention} is not in the trusted list!", ephemeral=True)
+    
+    trusted_users.remove(user.id)
+    save_trusted_users(trusted_users)
+    await interaction.response.send_message(f"✅ Removed {user.mention} from trusted users!", ephemeral=True)
+
+@bot.tree.command(name="list_trusted_users", description="List all trusted users (Bot Owner Only)")
+async def list_trusted_users(interaction: discord.Interaction):
+    """List all trusted users"""
+    if not is_bot_owner(interaction.user.id):
+        return await interaction.response.send_message("❌ Only the bot owner can use this command!", ephemeral=True)
+    
+    trusted_users = load_trusted_users()
+    if not trusted_users:
+        return await interaction.response.send_message("ℹ️ No trusted users found.", ephemeral=True)
+    
+    users_list = []
+    for user_id in trusted_users:
+        try:
+            user = await bot.fetch_user(user_id)
+            users_list.append(f"• {user.mention} (ID: {user_id})")
+        except:
+            users_list.append(f"• Unknown User (ID: {user_id})")
+    
+    embed = discord.Embed(title="🤝 Trusted Users", color=discord.Color.blue())
+    embed.description = "\n".join(users_list)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+# ==================== DATA COMMANDS PERMISSION CHECK ====================
+@bot.tree.command(name="backup_data", description="Create a backup of all server data (Trusted Users Only)")
+@app_commands.check(has_data_access)
+async def backup_data(interaction: discord.Interaction):
+
+@bot.tree.command(name="export_data", description="Export server data as JSON files (Trusted Users Only)")
+@app_commands.describe(
+    data_type="Type of data to export"
+)
+@app_commands.choices(data_type=[
+    app_commands.Choice(name="📦 All Data", value="all"),
+    app_commands.Choice(name="🎫 Ticket Configs", value="ticket_configs"),
+    app_commands.Choice(name="🔄 Multi-Ticket Configs", value="multi_ticket_configs"),
+    app_commands.Choice(name="📋 Active Tickets", value="active_tickets"),
+    app_commands.Choice(name="👤 User Ticket Counts", value="user_ticket_counts"),
+    app_commands.Choice(name="🛡️ Staff Roles", value="staff_roles"),
+    app_commands.Choice(name="🌐 User Timezones", value="user_timezones")
+])
+@app_commands.check(has_data_access)
+async def export_data(interaction: discord.Interaction, data_type: app_commands.Choice[str]):
+    # ... export_data code here ...
+
+@bot.tree.command(name="import_data", description="Import data from JSON files (Trusted Users Only)")
+@app_commands.describe(
+    json_file="JSON file to import",
+    data_type="Type of data being imported"
+)
+@app_commands.choices(data_type=[
+    app_commands.Choice(name="🎫 Ticket Configs", value="ticket_configs"),
+    app_commands.Choice(name="🔄 Multi-Ticket Configs", value="multi_ticket_configs"),
+    app_commands.Choice(name="📋 Active Tickets", value="active_tickets"),
+    app_commands.Choice(name="👤 User Ticket Counts", value="user_ticket_counts"),
+    app_commands.Choice(name="🛡️ Staff Roles", value="staff_roles"),
+    app_commands.Choice(name="🌐 User Timezones", value="user_timezones")
+])
+@app_commands.check(has_data_access)
+async def import_data(interaction: discord.Interaction, json_file: discord.Attachment, data_type: app_commands.Choice[str]):
+    # ... import_data code here ...
+
+    @bot.tree.command(name="reset_data", description="Reset specific server data (Trusted Users Only)")
+@app_commands.describe(
+    data_type="Type of data to reset"
+)
+@app_commands.choices(data_type=[
+    app_commands.Choice(name="📋 Active Tickets", value="active_tickets"),
+    app_commands.Choice(name="👤 User Ticket Counts", value="user_ticket_counts"),
+    app_commands.Choice(name="🌐 User Timezones", value="user_timezones"),
+    app_commands.Choice(name="🔄 ALL DATA (DANGEROUS)", value="all")
+])
+@app_commands.check(has_data_access)
+async def reset_data(interaction: discord.Interaction, data_type: app_commands.Choice[str]):
+    # ... reset_data code here ...
+
+    @bot.tree.command(name="view_data", description="View server data statistics (Trusted Users Only)")
+@app_commands.describe(
+    data_type="Type of data to view"
+)
+@app_commands.choices(data_type=[
+    app_commands.Choice(name="📊 All Data Stats", value="all"),
+    app_commands.Choice(name="🎫 Ticket Configs", value="ticket_configs"),
+    app_commands.Choice(name="🔄 Multi-Ticket Configs", value="multi_ticket_configs"),
+    app_commands.Choice(name="📋 Active Tickets", value="active_tickets"),
+    app_commands.Choice(name="👤 User Counts", value="user_ticket_counts"),
+    app_commands.Choice(name="🛡️ Staff Roles", value="staff_roles"),
+    app_commands.Choice(name="🌐 Timezones", value="user_timezones")
+])
+@app_commands.check(has_data_access)
+async def view_data(interaction: discord.Interaction, data_type: app_commands.Choice[str]):
+        @bot.tree.command(name="sendmessage", description="Send embed message")
 @app_commands.describe(
     channel="The channel to send the message to",
     title="Embed title(optional)",
@@ -941,7 +1096,7 @@ async def send_embed(
     interaction: discord.Interaction,
     channel: discord.TextChannel,
     title: str = None,
-    message: str = None,
+    message: str,
     color: str = "0000FF",
     footer: str = None,
     image_url: str = None
@@ -958,7 +1113,7 @@ async def send_embed(
     try:
         embed = discord.Embed(
         title=title[:256] or "",
-            description=message[:4096] or "",
+            description=message[:4096],
             color=discord.Color(int(color, 16)) if color != "0000FF" else discord.Color.default()
         )
 
