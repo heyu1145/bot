@@ -1015,15 +1015,25 @@ async def list_trusted_users(interaction: discord.Interaction):
     embed.description = "\n".join(users_list)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# ==================== DATA COMMANDS PERMISSION CHECK ====================
+# ==================== DATA COMMANDS ====================
 @bot.tree.command(name="backup_data", description="Create a backup of all server data (Trusted Users Only)")
 @app_commands.check(has_data_access)
 async def backup_data(interaction: discord.Interaction):
+    if not has_data_access(interaction):
+        await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
+        return
+    
+    await interaction.response.defer(ephemeral=True)
+    guild_id = str(interaction.guild.id)
+    success = backup_server_data(guild_id)
+    
+    if success:
+        await interaction.followup.send("✅ Server data backup created successfully!", ephemeral=True)
+    else:
+        await interaction.followup.send("❌ Failed to create backup. Check logs for details.", ephemeral=True)
 
 @bot.tree.command(name="export_data", description="Export server data as JSON files (Trusted Users Only)")
-@app_commands.describe(
-    data_type="Type of data to export"
-)
+@app_commands.describe(data_type="Type of data to export")
 @app_commands.choices(data_type=[
     app_commands.Choice(name="📦 All Data", value="all"),
     app_commands.Choice(name="🎫 Ticket Configs", value="ticket_configs"),
@@ -1035,7 +1045,71 @@ async def backup_data(interaction: discord.Interaction):
 ])
 @app_commands.check(has_data_access)
 async def export_data(interaction: discord.Interaction, data_type: app_commands.Choice[str]):
-    # ... export_data code here ...
+    if not has_data_access(interaction):
+        await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
+        return
+    
+    await interaction.response.defer(ephemeral=True)
+    
+    guild_id = str(interaction.guild.id)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    files = []
+    
+    try:
+        if data_type.value == "all" or data_type.value == "ticket_configs":
+            data = load_ticket_configs(guild_id)
+            with open(f"ticket_configs_{timestamp}.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            files.append(discord.File(f"ticket_configs_{timestamp}.json"))
+        
+        if data_type.value == "all" or data_type.value == "multi_ticket_configs":
+            data = load_multi_ticket_configs(guild_id)
+            with open(f"multi_ticket_configs_{timestamp}.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            files.append(discord.File(f"multi_ticket_configs_{timestamp}.json"))
+        
+        if data_type.value == "all" or data_type.value == "active_tickets":
+            data = load_active_tickets(guild_id)
+            with open(f"active_tickets_{timestamp}.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            files.append(discord.File(f"active_tickets_{timestamp}.json"))
+        
+        if data_type.value == "all" or data_type.value == "user_ticket_counts":
+            data = load_user_ticket_counts(guild_id)
+            with open(f"user_ticket_counts_{timestamp}.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            files.append(discord.File(f"user_ticket_counts_{timestamp}.json"))
+        
+        if data_type.value == "all" or data_type.value == "staff_roles":
+            data = load_staff_roles(guild_id)
+            with open(f"staff_roles_{timestamp}.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            files.append(discord.File(f"staff_roles_{timestamp}.json"))
+        
+        if data_type.value == "all" or data_type.value == "user_timezones":
+            data = load_user_timezones(guild_id)
+            with open(f"user_timezones_{timestamp}.json", "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            files.append(discord.File(f"user_timezones_{timestamp}.json"))
+        
+        if files:
+            await interaction.followup.send(
+                f"✅ Exported {data_type.name} for server {interaction.guild.name}",
+                files=files,
+                ephemeral=True
+            )
+            
+            # Clean up temporary files
+            for file in files:
+                try:
+                    os.remove(file.filename)
+                except:
+                    pass
+        else:
+            await interaction.followup.send("❌ No data to export.", ephemeral=True)
+            
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error exporting data: {str(e)}", ephemeral=True)
 
 @bot.tree.command(name="import_data", description="Import data from JSON files (Trusted Users Only)")
 @app_commands.describe(
@@ -1052,23 +1126,64 @@ async def export_data(interaction: discord.Interaction, data_type: app_commands.
 ])
 @app_commands.check(has_data_access)
 async def import_data(interaction: discord.Interaction, json_file: discord.Attachment, data_type: app_commands.Choice[str]):
-    # ... import_data code here ...
+    if not has_data_access(interaction):
+        await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
+        return
+    
+    if not json_file.filename.endswith('.json'):
+        return await interaction.response.send_message("❌ Please upload a JSON file!", ephemeral=True)
+    
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        # Download and read the JSON file
+        content = await json_file.read()
+        data = json.loads(content.decode('utf-8'))
+        
+        guild_id = str(interaction.guild.id)
+        
+        if data_type.value == "ticket_configs":
+            if not isinstance(data, list):
+                return await interaction.followup.send("❌ Invalid format for ticket configs! Expected array.", ephemeral=True)
+            save_ticket_configs(guild_id, data)
+            await interaction.followup.send("✅ Ticket configs imported successfully!", ephemeral=True)
+        
+        elif data_type.value == "multi_ticket_configs":
+            if not isinstance(data, list):
+                return await interaction.followup.send("❌ Invalid format for multi-ticket configs! Expected array.", ephemeral=True)
+            save_multi_ticket_configs(guild_id, data)
+            await interaction.followup.send("✅ Multi-ticket configs imported successfully!", ephemeral=True)
+        
+        elif data_type.value == "active_tickets":
+            if not isinstance(data, dict):
+                return await interaction.followup.send("❌ Invalid format for active tickets! Expected object.", ephemeral=True)
+            save_json_data(guild_id, "active_tickets.json", data)
+            await interaction.followup.send("✅ Active tickets imported successfully!", ephemeral=True)
+        
+        elif data_type.value == "user_ticket_counts":
+            if not isinstance(data, dict):
+                return await interaction.followup.send("❌ Invalid format for user ticket counts! Expected object.", ephemeral=True)
+            save_json_data(guild_id, "user_ticket_counts.json", data)
+            await interaction.followup.send("✅ User ticket counts imported successfully!", ephemeral=True)
+        
+        elif data_type.value == "staff_roles":
+            if not isinstance(data, list):
+                return await interaction.followup.send("❌ Invalid format for staff roles! Expected array.", ephemeral=True)
+            save_staff_roles(guild_id, data)
+            await interaction.followup.send("✅ Staff roles imported successfully!", ephemeral=True)
+        
+        elif data_type.value == "user_timezones":
+            if not isinstance(data, dict):
+                return await interaction.followup.send("❌ Invalid format for user timezones! Expected object.", ephemeral=True)
+            save_json_data(guild_id, "user_timezones.json", data)
+            await interaction.followup.send("✅ User timezones imported successfully!", ephemeral=True)
+        
+    except json.JSONDecodeError:
+        await interaction.followup.send("❌ Invalid JSON file format!", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error importing data: {str(e)}", ephemeral=True)
 
-    @bot.tree.command(name="reset_data", description="Reset specific server data (Trusted Users Only)")
-@app_commands.describe(
-    data_type="Type of data to reset"
-)
-@app_commands.choices(data_type=[
-    app_commands.Choice(name="📋 Active Tickets", value="active_tickets"),
-    app_commands.Choice(name="👤 User Ticket Counts", value="user_ticket_counts"),
-    app_commands.Choice(name="🌐 User Timezones", value="user_timezones"),
-    app_commands.Choice(name="🔄 ALL DATA (DANGEROUS)", value="all")
-])
-@app_commands.check(has_data_access)
-async def reset_data(interaction: discord.Interaction, data_type: app_commands.Choice[str]):
-    # ... reset_data code here ...
-
-    @bot.tree.command(name="view_data", description="View server data statistics (Trusted Users Only)")
+@bot.tree.command(name="view_data", description="View server data statistics (Trusted Users Only)")
 @app_commands.describe(
     data_type="Type of data to view"
 )
@@ -1083,6 +1198,75 @@ async def reset_data(interaction: discord.Interaction, data_type: app_commands.C
 ])
 @app_commands.check(has_data_access)
 async def view_data(interaction: discord.Interaction, data_type: app_commands.Choice[str]):
+    if not has_data_access(interaction):
+        await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
+        return
+    
+    guild_id = str(interaction.guild.id)
+    
+    embed = discord.Embed(
+        title=f"📁 Server Data - {data_type.name}",
+        color=discord.Color.blue(),
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    try:
+        if data_type.value == "all" or data_type.value == "ticket_configs":
+            ticket_configs = load_ticket_configs(guild_id)
+            embed.add_field(
+                name="🎫 Ticket Configs",
+                value=f"Count: {len(ticket_configs)}",
+                inline=True
+            )
+        
+        if data_type.value == "all" or data_type.value == "multi_ticket_configs":
+            multi_configs = load_multi_ticket_configs(guild_id)
+            embed.add_field(
+                name="🔄 Multi-Ticket Configs",
+                value=f"Count: {len(multi_configs)}",
+                inline=True
+            )
+        
+        if data_type.value == "all" or data_type.value == "active_tickets":
+            active_tickets = load_active_tickets(guild_id)
+            embed.add_field(
+                name="📋 Active Tickets",
+                value=f"Count: {len(active_tickets)}",
+                inline=True
+            )
+        
+        if data_type.value == "all" or data_type.value == "user_ticket_counts":
+            user_counts = load_user_ticket_counts(guild_id)
+            total_tickets = sum(user_counts.values())
+            embed.add_field(
+                name="👤 User Ticket Counts",
+                value=f"Users: {len(user_counts)}\nTotal Tickets: {total_tickets}",
+                inline=True
+            )
+        
+        if data_type.value == "all" or data_type.value == "staff_roles":
+            staff_roles = load_staff_roles(guild_id)
+            embed.add_field(
+                name="🛡️ Staff Roles",
+                value=f"Count: {len(staff_roles)}",
+                inline=True
+            )
+        
+        if data_type.value == "all" or data_type.value == "user_timezones":
+            timezones = load_user_timezones(guild_id)
+            embed.add_field(
+                name="🌐 User Timezones",
+                value=f"Count: {len(timezones)}",
+                inline=True
+            )
+        
+        # Add server info
+        embed.set_footer(text=f"Server ID: {guild_id}")
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"❌ Error loading data: {str(e)}", ephemeral=True)
         @bot.tree.command(name="sendmessage", description="Send embed message")
 @app_commands.describe(
     channel="The channel to send the message to",
