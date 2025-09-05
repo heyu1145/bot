@@ -214,3 +214,96 @@ def backup_server_data(guild_id: str) -> bool:
     except Exception as e:
         logger.error(f"Backup failed: {e}")
         return False
+
+# ==================== Get all datas functions ===================
+# ==================== GLOBAL DATA FUNCTIONS ====================
+
+def get_all_servers_data() -> List[str]:
+    """Get list of all server directories"""
+    if not os.path.exists("servers"):
+        return []
+    return [d for d in os.listdir("servers") if os.path.isdir(os.path.join("servers", d))]
+
+def load_all_ticket_configs() -> Dict[str, List[Dict[str, Any]]]:
+    """Load ticket configs from ALL servers"""
+    all_data = {}
+    for server_id in get_all_servers_data():
+        all_data[server_id] = load_ticket_configs(server_id)
+    return all_data
+
+def load_all_multi_ticket_configs() -> Dict[str, List[Dict[str, Any]]]:
+    """Load multi-ticket configs from ALL servers"""
+    all_data = {}
+    for server_id in get_all_servers_data():
+        all_data[server_id] = load_multi_ticket_configs(server_id)
+    return all_data
+
+def load_all_active_tickets() -> Dict[str, Dict[str, Any]]:
+    """Load active tickets from ALL servers"""
+    all_data = {}
+    for server_id in get_all_servers_data():
+        all_data[server_id] = load_active_tickets(server_id)
+    return all_data
+
+def load_all_user_ticket_counts() -> Dict[str, Dict[str, int]]:
+    """Load user ticket counts from ALL servers"""
+    all_data = {}
+    for server_id in get_all_servers_data():
+        all_data[server_id] = load_user_ticket_counts(server_id)
+    return all_data
+
+def load_all_staff_roles() -> Dict[str, List[str]]:
+    """Load staff roles from ALL servers"""
+    all_data = {}
+    for server_id in get_all_servers_data():
+        all_data[server_id] = load_staff_roles(server_id)
+    return all_data
+
+def load_all_user_timezones() -> Dict[str, Dict[str, str]]:
+    """Load user timezones from ALL servers"""
+    all_data = {}
+    for server_id in get_all_servers_data():
+        all_data[server_id] = load_user_timezones(server_id)
+    return all_data
+
+# ==================== GLOBAL EXPORT/IMPORT ====================
+
+def export_all_server_data() -> Dict[str, Dict[str, Any]]:
+    """Export all data from all servers"""
+    return {
+        "ticket_configs": load_all_ticket_configs(),
+        "multi_ticket_configs": load_all_multi_ticket_configs(),
+        "active_tickets": load_all_active_tickets(),
+        "user_ticket_counts": load_all_user_ticket_counts(),
+        "staff_roles": load_all_staff_roles(),
+        "user_timezones": load_all_user_timezones(),
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "total_servers": len(get_all_servers_data())
+    }
+
+def import_all_server_data(data: Dict[str, Any]) -> bool:
+    """Import data to all servers"""
+    try:
+        # Import each server's data
+        for server_id, server_data in data.get("ticket_configs", {}).items():
+            save_ticket_configs(server_id, server_data)
+        
+        for server_id, server_data in data.get("multi_ticket_configs", {}).items():
+            save_multi_ticket_configs(server_id, server_data)
+        
+        for server_id, server_data in data.get("active_tickets", {}).items():
+            save_json_data(server_id, "active_tickets.json", server_data)
+        
+        for server_id, server_data in data.get("user_ticket_counts", {}).items():
+            save_json_data(server_id, "user_ticket_counts.json", server_data)
+        
+        for server_id, server_data in data.get("staff_roles", {}).items():
+            save_staff_roles(server_id, server_data)
+        
+        for server_id, server_data in data.get("user_timezones", {}).items():
+            save_json_data(server_id, "user_timezones.json", server_data)
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error importing all server data: {e}")
+        return False

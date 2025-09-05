@@ -9,27 +9,19 @@ from typing import List
 from utils.storage import (
     load_ticket_configs, load_multi_ticket_configs, load_active_tickets,
     load_user_ticket_counts, load_staff_roles, load_user_timezones,
-    save_json_data, backup_server_data
+    save_json_data, backup_server_data,
+    # NEW: Global data functions
+    export_all_server_data, import_all_server_data,
+    load_all_ticket_configs, load_all_multi_ticket_configs,
+    load_all_active_tickets, load_all_user_ticket_counts,
+    load_all_staff_roles, load_all_user_timezones,
+    get_all_servers_data
 )
 from utils.permissions import has_data_access
 
 class DataManagement(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-    @app_commands.command(name="backup_data", description="Create a backup of all server data")
-    async def backup_data(self, interaction: discord.Interaction):
-        if not has_data_access(interaction):
-            return await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
-        
-        await interaction.response.defer(ephemeral=True)
-        guild_id = str(interaction.guild.id)
-        success = backup_server_data(guild_id)
-        
-        if success:
-            await interaction.followup.send("✅ Server data backup created successfully!", ephemeral=True)
-        else:
-            await interaction.followup.send("❌ Failed to create backup. Check logs for details.", ephemeral=True)
 
     @app_commands.command(name="export_data", description="Export server data as JSON files")
     @app_commands.describe(data_type="Type of data to export")
@@ -247,6 +239,164 @@ class DataManagement(commands.Cog):
                 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error clearing data: {str(e)}", ephemeral=True)
+ @app_commands.command(name="backup_data", description="Create a backup of all server data")
+    async def backup_data(self, interaction: discord.Interaction):
+        if not has_data_access(interaction):
+            return await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
+        
+        await interaction.response.defer(ephemeral=True)
+        success = True
+        for server_id in get_all_servers_data():
+            if not backup_server_data(server_id):
+                success = False
+        
+        if success:
+            await interaction.followup.send("✅ All server data backup created successfully!", ephemeral=True)
+        else:
+            await interaction.followup.send("❌ Some backups failed. Check logs for details.", ephemeral=True)
+
+    @app_commands.command(name="export_all_data", description="Export ALL server data as a single JSON file")
+    async def export_all_data(self, interaction: discord.Interaction):
+        if not has_data_access(interaction):
+            return await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Export data from ALL servers
+            all_data = export_all_server_data()
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"all_servers_data_{timestamp}.json"
+            
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(all_data, f, indent=2, ensure_ascii=False)
+            
+            # Send the file
+            file = discord.File(filename)
+            await interaction.followup.send(
+                f"✅ Exported data from {all_data['total_servers']} servers",
+                file=file,
+                ephemeral=True
+            )
+            
+            # Clean up
+            os.remove(filename)
+            
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error exporting all server data: {str(e)}", ephemeral=True)
+
+    @app_commands.command(name="import_all_data", description="Import data to ALL servers from JSON file")
+    @app_commands.describe(json_file="JSON file containing all server data")
+    async def import_all_data(self, interaction: discord.Interaction, json_file: discord.Attachment):
+        if not has_data_access(interaction):
+            return await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
+        
+        if not json_file.filename.endswith('.json'):
+            return await interaction.response.send_message("❌ Please upload a JSON file!", ephemeral=True)
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Download and read the JSON file
+            content = await json_file.read()
+            data = json.loads(content.decode('utf-8'))
+            
+            # Import to ALL servers
+            success = import_all_server_data(data)
+            
+            if success:
+                await interaction.followup.send("✅ All server data imported successfully!", ephemeral=True)
+            else:
+                await interaction.followup.send("❌ Error importing data to some servers. Check logs for details.", ephemeral=True)
+                
+        except json.JSONDecodeError:
+            await interaction.followup.send("❌ Invalid JSON file format!", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error importing all server data: {str(e)}", ephemeral=True)
+
+    @app_commands.command(name="view_all_data_stats", description="View statistics for ALL servers")
+    async def view_all_data_stats(self, interaction: discord.Interaction):
+        if not has_data_access(interaction):
+            return await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Load data from ALL servers
+            all_servers = get_all_servers_data()
+            ticket_configs = load_all_ticket_configs()
+            multi_configs = load_all_multi_ticket_configs()
+            active_tickets = load_all_active_tickets()
+            user_counts = load_all_user_ticket_counts()
+            staff_roles = load_all_staff_roles()
+            timezones = load_all_user_timezones()
+            
+            # Calculate totals
+            total_ticket_configs = sum(len(configs) for configs in ticket_configs.values())
+            total_multi_configs = sum(len(configs) for configs in multi_configs.values())
+            total_active_tickets = sum(len(tickets) for tickets in active_tickets.values())
+            total_user_counts = sum(len(counts) for counts in user_counts.values())
+            total_tickets_created = sum(sum(counts.values()) for counts in user_counts.values())
+            total_staff_roles = sum(len(roles) for roles in staff_roles.values())
+            total_timezones = sum(len(tz) for tz in timezones.values())
+            
+            embed = discord.Embed(
+                title="📊 All Servers Data Statistics",
+                color=discord.Color.blue(),
+                timestamp=datetime.now(timezone.utc)
+            )
+            
+            embed.add_field(name="🏰 Total Servers", value=str(len(all_servers)), inline=True)
+            embed.add_field(name="🎫 Ticket Configs", value=f"{total_ticket_configs} across all servers", inline=True)
+            embed.add_field(name="🔄 Multi-Ticket Panels", value=f"{total_multi_configs} across all servers", inline=True)
+            embed.add_field(name="📋 Active Tickets", value=f"{total_active_tickets} across all servers", inline=True)
+            embed.add_field(name="👤 User Ticket Counts", value=f"{total_user_counts} users\n{total_tickets_created} total tickets", inline=True)
+            embed.add_field(name="🛡️ Staff Roles", value=f"{total_staff_roles} across all servers", inline=True)
+            embed.add_field(name="🌐 User Timezones", value=f"{total_timezones} across all servers", inline=True)
+            
+            # Add server breakdown
+            if all_servers:
+                server_list = "\n".join([f"• Server `{server_id}`" for server_id in all_servers[:5]])
+                if len(all_servers) > 5:
+                    server_list += f"\n• ... and {len(all_servers) - 5} more"
+                embed.add_field(name="📋 Servers", value=server_list, inline=False)
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error loading all server data: {str(e)}", ephemeral=True)
+
+    @app_commands.command(name="clear_all_data", description="Clear specific data from ALL servers (DANGEROUS)")
+    @app_commands.describe(data_type="Type of data to clear")
+    @app_commands.choices(data_type=[
+        app_commands.Choice(name="📋 Active Tickets", value="active_tickets"),
+        app_commands.Choice(name="👤 User Ticket Counts", value="user_ticket_counts"),
+        app_commands.Choice(name="🌐 User Timezones", value="user_timezones")
+    ])
+    async def clear_all_data(self, interaction: discord.Interaction, data_type: app_commands.Choice[str]):
+        if not has_data_access(interaction):
+            return await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            cleared_servers = 0
+            for server_id in get_all_servers_data():
+                if data_type.value == "active_tickets":
+                    save_json_data(server_id, "active_tickets.json", {})
+                elif data_type.value == "user_ticket_counts":
+                    save_json_data(server_id, "user_ticket_counts.json", {})
+                elif data_type.value == "user_timezones":
+                    save_json_data(server_id, "user_timezones.json", {})
+                cleared_servers += 1
+            
+            await interaction.followup.send(f"✅ Cleared {data_type.name} from {cleared_servers} servers!", ephemeral=True)
+                
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error clearing data: {str(e)}", ephemeral=True)
+
+async def setup(bot):
+    await bot.add_cog(DataManagement(bot))
 
 async def setup(bot):
     await bot.add_cog(DataManagement(bot))
