@@ -40,6 +40,9 @@ def is_bot_owner(user_id: int) -> bool:
         logger.error(f"Invalid OWNER_USER_ID format: {OWNER_USER_ID}")
         return False
 
+def is_trusted_user(user_id: int) -> bool:
+    return is_bot_owner(user_id) or user_id in load_trusted_users()
+
 # Multi-Ticket Configs
 def load_multi_ticket_configs(guild_id: str) -> List[Dict[str, Any]]:
     path = get_server_data_path(guild_id, "multi_ticket_configs.json")
