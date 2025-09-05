@@ -239,8 +239,9 @@ class DataManagement(commands.Cog):
                 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error clearing data: {str(e)}", ephemeral=True)
- @app_commands.command(name="backup_data", description="Create a backup of all server data")
-    async def backup_data(self, interaction: discord.Interaction):
+
+@app_commands.command(name="backup_data", description="Create a backup of all server data")
+async def backup_data(self, interaction: discord.Interaction):
         if not has_data_access(interaction):
             return await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
         
