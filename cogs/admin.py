@@ -156,7 +156,7 @@ class Admin(commands.Cog):
         title="Embed title (optional)",
         message="Embed message",
         color="Embed color (hex code without #, e.g., FF0000 
-Color3 to hex: 255 = FF (F = 15, 15*16+15=255),130 = 82 (8*16+2=130)",
+Color3 to hex  255 = FF (F = 15, 15*16+15=255)  130 = 82 (8*16+2=130)",
         footer="Embed footer text (optional)",
         image_url="Image URL (optional)"
     )
