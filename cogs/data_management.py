@@ -257,7 +257,7 @@ async def backup_data(self, interaction: discord.Interaction):
             await interaction.followup.send("❌ Some backups failed. Check logs for details.", ephemeral=True)
 
     @app_commands.command(name="export_all_data", description="Export ALL server data as a single JSON file")
-    async def export_all_data(self, interaction: discord.Interaction):
+async def export_all_data(self, interaction: discord.Interaction):
         if not has_data_access(interaction):
             return await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
         
@@ -287,8 +287,8 @@ async def backup_data(self, interaction: discord.Interaction):
             await interaction.followup.send(f"❌ Error exporting all server data: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="import_all_data", description="Import data to ALL servers from JSON file")
-    @app_commands.describe(json_file="JSON file containing all server data")
-    async def import_all_data(self, interaction: discord.Interaction, json_file: discord.Attachment):
+@app_commands.describe(json_file="JSON file containing all server data")
+async def import_all_data(self, interaction: discord.Interaction, json_file: discord.Attachment):
         if not has_data_access(interaction):
             return await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
         
@@ -316,7 +316,7 @@ async def backup_data(self, interaction: discord.Interaction):
             await interaction.followup.send(f"❌ Error importing all server data: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="view_all_data_stats", description="View statistics for ALL servers")
-    async def view_all_data_stats(self, interaction: discord.Interaction):
+async def view_all_data_stats(self, interaction: discord.Interaction):
         if not has_data_access(interaction):
             return await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
         
@@ -368,13 +368,13 @@ async def backup_data(self, interaction: discord.Interaction):
             await interaction.followup.send(f"❌ Error loading all server data: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="clear_all_data", description="Clear specific data from ALL servers (DANGEROUS)")
-    @app_commands.describe(data_type="Type of data to clear")
-    @app_commands.choices(data_type=[
+@app_commands.describe(data_type="Type of data to clear")
+@app_commands.choices(data_type=[
         app_commands.Choice(name="📋 Active Tickets", value="active_tickets"),
         app_commands.Choice(name="👤 User Ticket Counts", value="user_ticket_counts"),
         app_commands.Choice(name="🌐 User Timezones", value="user_timezones")
     ])
-    async def clear_all_data(self, interaction: discord.Interaction, data_type: app_commands.Choice[str]):
+async def clear_all_data(self, interaction: discord.Interaction, data_type: app_commands.Choice[str]):
         if not has_data_access(interaction):
             return await interaction.response.send_message("❌ Access denied. Trusted users only.", ephemeral=True)
         
