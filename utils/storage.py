@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 import logging
 
-s.py
 def get_server_data_path(guild_id: str, filename: str) -> str:
     """Get path to server-specific data file"""
     if not os.path.exists(f"servers/{guild_id}"):
