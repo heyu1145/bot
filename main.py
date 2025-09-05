@@ -10,6 +10,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('discord')
 logger.setLevel(logging.INFO)
 
+logger.propagate = False
+
 # Load environment variables
 TOKEN = os.getenv('TOKEN')
 OWNER_USER_ID = os.getenv('OWNER_USER_ID')
