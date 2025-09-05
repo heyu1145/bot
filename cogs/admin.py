@@ -117,7 +117,7 @@ class Admin(commands.Cog):
 
         await interaction.response.send_message("📋 Current staff roles:\n" + "\n".join(staff_roles), ephemeral=True)
 
-    @app_commands.command(name="bot_status", description="Check bot status and permissions")
+    @app_commands.command(name="botstatus", description="Check bot status and permissions")
     async def bot_status(self, interaction: discord.Interaction):
         if not interaction.guild:
             return await interaction.response.send_message("❌ Server only command!", ephemeral=True)
