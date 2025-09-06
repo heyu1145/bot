@@ -4,6 +4,9 @@ import os
 import logging
 from utils.storage import load_trusted_users, is_bot_owner
 from utils.permissions import has_data_access
+from keep_alive import keep_alive
+
+keep_alive()
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -75,9 +78,6 @@ async def bot_info(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 if __name__ == "__main__":
-    from keep_alive import keep_alive
-    keep_alive()
-    
     try:
         bot.run(TOKEN)
     except discord.LoginFailure:
