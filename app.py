@@ -17,7 +17,7 @@ app = Flask(__name__)
 # Global bot process
 bot_process = None
 
-# DARK MODE HTML template (Updated without health check button)
+# DARK MODE HTML template with JavaScript for real-time updates
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -97,6 +97,12 @@ HTML_TEMPLATE = """
             border-left: 4px solid #4fc3f7;
             backdrop-filter: blur(5px);
             text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card.updating {
+            background: rgba(38, 50, 56, 0.8);
+            border-left: 4px solid #ff9800;
         }
         
         .stat-label {
@@ -111,6 +117,11 @@ HTML_TEMPLATE = """
             font-size: 1.3rem;
             font-weight: bold;
             color: #e0f7fa;
+            transition: all 0.3s ease;
+        }
+        
+        .stat-value.updating {
+            color: #ff9800;
         }
         
         .stat-subvalue {
@@ -127,6 +138,7 @@ HTML_TEMPLATE = """
             margin-top: 15px;
             font-size: 1.1rem;
             text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
         }
         
         .online {
@@ -170,6 +182,11 @@ HTML_TEMPLATE = """
             font-size: 1.1rem;
             font-weight: bold;
             color: #fff;
+            transition: all 0.3s ease;
+        }
+        
+        .system-value.updating {
+            color: #ff9800;
         }
         
         .footer {
@@ -202,6 +219,18 @@ HTML_TEMPLATE = """
             box-shadow: 0 5px 15px rgba(79, 195, 247, 0.3);
         }
         
+        .update-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 152, 0, 0.9);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            display: none;
+        }
+        
         /* Glow effects */
         .container {
             animation: glow 3s ease-in-out infinite alternate;
@@ -229,42 +258,44 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
+    <div class="update-indicator" id="updateIndicator">🔄 Updating...</div>
+    
     <div class="container">
-        <div class="status-icon">
+        <div class="status-icon" id="statusIcon">
             {{ status_icon }}
         </div>
         
         <h1>Discord Bot Dashboard</h1>
         
-        <div class="status-text">
+        <div class="status-text" id="statusMessage">
             {{ status_message }}
         </div>
         
         <div class="stats-grid">
-            <div class="stat-card">
+            <div class="stat-card" id="webServerCard">
                 <div class="stat-label">Web Server</div>
                 <div class="stat-value status-online">ONLINE</div>
                 <div class="stat-subvalue">Port: {{ port }}</div>
             </div>
             
-            <div class="stat-card">
+            <div class="stat-card" id="botProcessCard">
                 <div class="stat-label">Bot Process</div>
-                <div class="stat-value {% if bot_status == 'running' %}status-online{% else %}status-offline{% endif %}">
+                <div class="stat-value {% if bot_status == 'running' %}status-online{% else %}status-offline{% endif %}" id="botStatusValue">
                     {{ bot_status.upper() }}
                 </div>
-                <div class="stat-subvalue">PID: {{ bot_pid }}</div>
+                <div class="stat-subvalue">PID: <span id="botPid">{{ bot_pid }}</span></div>
             </div>
             
-            <div class="stat-card">
+            <div class="stat-card" id="uptimeCard">
                 <div class="stat-label">Uptime</div>
-                <div class="stat-value">{{ uptime }}</div>
+                <div class="stat-value" id="uptimeValue">{{ uptime }}</div>
                 <div class="stat-subvalue">Since: {{ start_time }}</div>
             </div>
             
-            <div class="stat-card">
+            <div class="stat-card" id="systemCard">
                 <div class="stat-label">System</div>
-                <div class="stat-value">{{ cpu_usage }}% CPU</div>
-                <div class="stat-subvalue">{{ memory_usage }}% RAM</div>
+                <div class="stat-value" id="cpuUsage">{{ cpu_usage }}% CPU</div>
+                <div class="stat-subvalue"><span id="memoryUsage">{{ memory_usage }}</span>% RAM</div>
             </div>
         </div>
         
@@ -273,36 +304,138 @@ HTML_TEMPLATE = """
             <div class="system-stats">
                 <div class="system-stat">
                     <div class="system-label">CPU Cores</div>
-                    <div class="system-value">{{ cpu_cores }}</div>
+                    <div class="system-value" id="cpuCores">{{ cpu_cores }}</div>
                 </div>
                 <div class="system-stat">
                     <div class="system-label">Memory</div>
-                    <div class="system-value">{{ memory_mb }} MB</div>
+                    <div class="system-value" id="memoryMb">{{ memory_mb }} MB</div>
                 </div>
                 <div class="system-stat">
                     <div class="system-label">Threads</div>
-                    <div class="system-value">{{ thread_count }}</div>
+                    <div class="system-value" id="threadCount">{{ thread_count }}</div>
                 </div>
                 <div class="system-stat">
                     <div class="system-label">Disk</div>
-                    <div class="system-value">{{ disk_usage }}%</div>
+                    <div class="system-value" id="diskUsage">{{ disk_usage }}%</div>
                 </div>
             </div>
         </div>
         
-        <div class="bot-status {% if bot_status == 'running' %}online{% else %}offline{% endif %}">
+        <div class="bot-status {% if bot_status == 'running' %}online{% else %}offline{% endif %}" id="botStatus">
             🤖 Bot is {{ bot_status.upper() }}
         </div>
         
         <div class="footer">
-            <p>Powered by Flask & Render • {{ response_time }}ms response</p>
+            <p>Powered by Flask & Render • <span id="responseTime">{{ response_time }}</span>ms response</p>
             <div class="links">
                 <a href="/ping">Ping Test</a>
                 <a href="/bot-status">JSON API</a>
                 <a href="/health">Health Check</a>
+                <a href="#" onclick="toggleAutoUpdate()" id="autoUpdateToggle">⏸️ Pause Updates</a>
             </div>
         </div>
     </div>
+
+    <script>
+        let autoUpdate = true;
+        let updateInterval;
+        
+        function toggleAutoUpdate() {
+            autoUpdate = !autoUpdate;
+            const toggleBtn = document.getElementById('autoUpdateToggle');
+            
+            if (autoUpdate) {
+                toggleBtn.textContent = '⏸️ Pause Updates';
+                startAutoUpdate();
+            } else {
+                toggleBtn.textContent = '▶️ Resume Updates';
+                clearInterval(updateInterval);
+            }
+        }
+        
+        function showUpdateIndicator() {
+            const indicator = document.getElementById('updateIndicator');
+            indicator.style.display = 'block';
+            setTimeout(() => {
+                indicator.style.display = 'none';
+            }, 1000);
+        }
+        
+        function updateElement(id, value, isUpdating = true) {
+            const element = document.getElementById(id);
+            if (element) {
+                if (isUpdating) {
+                    element.classList.add('updating');
+                    setTimeout(() => {
+                        element.classList.remove('updating');
+                    }, 500);
+                }
+                element.textContent = value;
+            }
+        }
+        
+        function updateDashboard(data) {
+            showUpdateIndicator();
+            
+            // Update bot status
+            updateElement('botStatusValue', data.bot_status.toUpperCase());
+            updateElement('botPid', data.bot_pid);
+            updateElement('uptimeValue', data.uptime);
+            updateElement('cpuUsage', data.cpu_usage + '% CPU');
+            updateElement('memoryUsage', data.memory_usage);
+            updateElement('responseTime', data.response_time);
+            
+            // Update system stats
+            updateElement('cpuCores', data.cpu_cores);
+            updateElement('memoryMb', data.memory_mb + ' MB');
+            updateElement('threadCount', data.thread_count);
+            updateElement('diskUsage', data.disk_usage + '%');
+            
+            // Update bot status visual
+            const botStatus = document.getElementById('botStatus');
+            if (data.bot_status === 'running') {
+                botStatus.className = 'bot-status online';
+                botStatus.textContent = '🤖 Bot is RUNNING';
+            } else {
+                botStatus.className = 'bot-status offline';
+                botStatus.textContent = '🤖 Bot is STOPPED';
+            }
+            
+            // Update status icon and message
+            const statusIcon = document.getElementById('statusIcon');
+            const statusMessage = document.getElementById('statusMessage');
+            if (data.bot_status === 'running') {
+                statusIcon.textContent = '🤖';
+                statusMessage.textContent = 'Your Discord bot is running successfully!';
+            } else {
+                statusIcon.textContent = '⚠️';
+                statusMessage.textContent = 'Bot process is currently offline';
+            }
+        }
+        
+        function fetchData() {
+            fetch('/api/live-data')
+                .then(response => response.json())
+                .then(data => {
+                    updateDashboard(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching data:', error);
+                });
+        }
+        
+        function startAutoUpdate() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+            updateInterval = setInterval(fetchData, 1000);
+        }
+        
+        // Start auto-update on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            startAutoUpdate();
+        });
+    </script>
 </body>
 </html>
 """
@@ -324,7 +457,7 @@ def get_system_stats():
     """Get comprehensive system statistics"""
     try:
         # CPU usage
-        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_percent = psutil.cpu_percent(interval=0.5)  # Faster update
         cpu_cores = psutil.cpu_count()
         
         # Memory usage
@@ -396,6 +529,34 @@ def home():
         thread_count=system_stats['thread_count'],
         response_time=response_time
     )
+
+@app.route('/api/live-data')
+def live_data():
+    """API endpoint for live data updates"""
+    start_time = time.time()
+    
+    bot_status = "running" if bot_process and bot_process.poll() is None else "stopped"
+    bot_pid = bot_process.pid if bot_process and bot_process.poll() is None else "N/A"
+    uptime = format_uptime(int(time.time() - server_start_time))
+    
+    # Get system statistics
+    system_stats = get_system_stats()
+    
+    # Calculate response time
+    response_time = round((time.time() - start_time) * 1000, 1)
+    
+    return jsonify({
+        'bot_status': bot_status,
+        'bot_pid': bot_pid,
+        'uptime': uptime,
+        'cpu_usage': system_stats['cpu_percent'],
+        'memory_usage': system_stats['memory_percent'],
+        'cpu_cores': system_stats['cpu_cores'],
+        'memory_mb': system_stats['memory_mb'],
+        'disk_usage': system_stats['disk_percent'],
+        'thread_count': system_stats['thread_count'],
+        'response_time': response_time
+    })
 
 @app.route('/health')
 def health():
@@ -488,7 +649,7 @@ def start_bot():
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1,  # Line buffered
+            bufsize=1,
             universal_newlines=True
         )
         
@@ -539,7 +700,7 @@ def start_ping_service():
                 logger.info(f"🔄 Self-ping successful: {response.status_code}")
             except Exception as e:
                 logger.warning(f"⚠️ Self-ping failed: {e}")
-            time.sleep(300)  # Ping every 5 minutes
+            time.sleep(300)
     
     threading.Thread(target=ping_self, daemon=True).start()
 
