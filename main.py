@@ -6,14 +6,18 @@ from utils.storage import load_trusted_users, is_bot_owner
 from utils.permissions import has_data_access
 from keep_alive import keep_alive
 
-keep_alive()
-
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('discord')
 logger.setLevel(logging.INFO)
 
 logger.propagate = False
+
+logger.info("Starting keep_alive server...")
+keep_alive_success = keep_alive()
+
+if not keep_alive_success:
+logger.warning("keep_alive server failed to start, but the bot running, the bot will offline after idle 5 minutes!")
 
 # Load environment variables
 TOKEN = os.getenv('TOKEN')

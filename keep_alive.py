@@ -1,28 +1,39 @@
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from flask import Flask, jsonify
 from threading import Thread
+import time
 import logging
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('HTTPService')
-logger.setLevel(logging.INFO)
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('keep_alive')
 
-class SimpleHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
-        self.wfile.write(b'Bot is alive!')
-    
-    def log_message(self, format, *args):
-        # Silence the server logs
-        return
+app = Flask('')
 
-def run_server():
-    server = HTTPServer(('0.0.0.0', 8080), SimpleHandler)
-    logger.info("✅ Keep-alive server started on port 8080")
-    server.serve_forever()
+@app.route('/')
+def home():
+    return jsonify({
+        "status": "online", 
+        "message": "Discord Bot is running!",
+        "timestamp": time.time()
+    })
+
+@app.route('/health')
+def health_check():
+    return jsonify({"status": "healthy", "timestamp": time.time()})
+
+def run_flask():
+    try:
+        logger.info("Starting Flask server on port 8080...")
+        app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False)
+    except Exception as e:
+        logger.error(f"Flask server error: {e}")
 
 def keep_alive():
-    t = Thread(target=run_server)
-    t.daemon = True
-    t.start()
+    try:
+        flask_thread = Thread(target=run_flask, daemon=True)
+        flask_thread.start()
+        logger.info("Flask keep-alive server started successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to start keep-alive server: {e}")
+        return False

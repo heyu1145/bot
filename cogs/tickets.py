@@ -18,6 +18,97 @@ from utils.storage import (
 from utils.permissions import is_admin_or_owner, has_event_access
 from utils.helpers import generate_transcript
 
+# Add the missing JoinTicketView class
+class JoinTicketView(View):
+    def __init__(self, thread_id: str, guild_id: str):
+        super().__init__(timeout=None)
+        self.thread_id = thread_id
+        self.guild_id = guild_id
+
+    @discord.ui.button(label="Join Ticket", style=discord.ButtonStyle.primary, emoji="🎫", custom_id="join_ticket")
+    async def join_ticket(self, interaction: discord.Interaction, button: Button):
+        try:
+            thread = interaction.guild.get_thread(int(self.thread_id))
+            if thread:
+                await thread.add_user(interaction.user)
+                await interaction.response.send_message(f"✅ Joined ticket: {thread.mention}", ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ Ticket not found!", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error joining ticket: {str(e)}", ephemeral=True)
+
+# Add the missing CloseReasonModal class
+class CloseReasonModal(Modal, title="🔒 Close Ticket"):
+    reason = TextInput(label="Reason for closing", placeholder="Optional reason for closing...", style=discord.TextStyle.paragraph, required=False, max_length=500)
+
+    def __init__(self, guild_id: str, thread_id: str):
+        super().__init__()
+        self.guild_id = guild_id
+        self.thread_id = thread_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        reason = str(self.reason) if self.reason.value else "No reason provided"
+        view = ConfirmCloseView(self.guild_id, self.thread_id, reason)
+        await interaction.response.send_message(f"**Are you sure you want to close this ticket?**\nReason: {reason}", view=view, ephemeral=True)
+
+# Add the missing ConfirmCloseView class
+class ConfirmCloseView(View):
+    def __init__(self, guild_id: str, thread_id: str, reason: str):
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.thread_id = thread_id
+        self.reason = reason
+
+    @discord.ui.button(label="Confirm Close", style=discord.ButtonStyle.danger, emoji="🔒")
+    async def confirm_close(self, interaction: discord.Interaction, button: Button):
+        try:
+            thread = interaction.guild.get_thread(int(self.thread_id))
+            if thread:
+                # Generate transcript first
+                transcript = await generate_transcript(thread)
+                
+                # Get ticket data
+                ticket_data = get_ticket_data(self.guild_id, self.thread_id)
+                if ticket_data and 'transcripts_channel_id' in ticket_data:
+                    try:
+                        transcripts_channel = interaction.guild.get_channel(int(ticket_data['transcripts_channel_id']))
+                        if transcripts_channel:
+                            transcript_file = discord.File(transcript, filename=f"transcript-{thread.name}.txt")
+                            await transcripts_channel.send(f"📋 Transcript for {thread.mention} (Closed by {interaction.user.mention})", file=transcript_file)
+                    except:
+                        pass
+                
+                # Archive the thread
+                await thread.edit(archived=True, locked=True)
+                
+                # Remove from active tickets
+                remove_active_ticket(self.guild_id, self.thread_id)
+                
+                await interaction.response.send_message("✅ Ticket closed and archived!", ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ Ticket not found!", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error closing ticket: {str(e)}", ephemeral=True)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def cancel_close(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.edit_message(content="Ticket closure cancelled.", view=None)
+
+# Add the missing CloseTicketView class
+class CloseTicketView(View):
+    def __init__(self, guild_id: str):
+        super().__init__(timeout=None)
+        self.guild_id = guild_id
+
+    @discord.ui.button(label="Close Ticket", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="close_ticket")
+    async def close_ticket(self, interaction: discord.Interaction, button: Button):
+        if not interaction.channel or not isinstance(interaction.channel, discord.Thread):
+            await interaction.response.send_message("❌ This can only be used in ticket threads!", ephemeral=True)
+            return
+        
+        modal = CloseReasonModal(self.guild_id, str(interaction.channel.id))
+        await interaction.response.send_modal(modal)
+
 class TicketTypeModal(Modal, title="🎫 Ticket Panel Setup"):
     panel_title = TextInput(label="Panel Title", placeholder="e.g., Support Center", default="Support Tickets", max_length=100, required=True)
     panel_description = TextInput(label="Panel Description", placeholder="Describe what this panel is for...", default="Click the button below to create a ticket", style=discord.TextStyle.paragraph, max_length=1000, required=True)
@@ -41,6 +132,7 @@ class SingleTicketSetupView(View):
         self.channel = channel
         self.panel_title = panel_title
         self.panel_description = panel_description
+        self.config_data = None  # Store config data
 
     @discord.ui.button(label="Configure Ticket", style=discord.ButtonStyle.primary, emoji="⚙️", row=0)
     async def configure_ticket(self, interaction: discord.Interaction, button: Button):
@@ -49,10 +141,15 @@ class SingleTicketSetupView(View):
         await modal.wait()
         
         if hasattr(modal, 'config_data'):
-            await self.create_single_ticket_panel(interaction, modal.config_data)
+            self.config_data = modal.config_data
+            await self.create_single_ticket_panel(interaction)
 
-    async def create_single_ticket_panel(self, interaction: discord.Interaction, config_data: Dict[str, Any]):
+    async def create_single_ticket_panel(self, interaction: discord.Interaction):
         try:
+            if not self.config_data or 'handle_channel_id' not in self.config_data:
+                await interaction.followup.send("❌ Please configure the ticket options first!", ephemeral=True)
+                return
+
             guild_id = str(interaction.guild.id)
             setup_id = uuid.uuid4().hex[:8]
             
@@ -60,12 +157,12 @@ class SingleTicketSetupView(View):
             ticket_config = {
                 "id": setup_id,
                 "ticket_channel_id": str(self.channel.id),
-                "handle_channel_id": config_data['handle_channel_id'],
-                "transcripts_channel_id": config_data.get('transcripts_channel_id'),
-                "title_format": config_data['title_format'],
-                "open_message": config_data['open_message'],
-                "button_label": config_data['button_label'],
-                "button_emoji": config_data.get('button_emoji'),
+                "handle_channel_id": self.config_data['handle_channel_id'],
+                "transcripts_channel_id": self.config_data.get('transcripts_channel_id'),
+                "title_format": self.config_data['title_format'],
+                "open_message": self.config_data['open_message'],
+                "button_label": self.config_data['button_label'],
+                "button_emoji": self.config_data.get('button_emoji'),
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
             
@@ -82,12 +179,12 @@ class SingleTicketSetupView(View):
                 "panel_description": self.panel_description,
                 "ticket_options": [{
                     'id': uuid.uuid4().hex[:6],
-                    'button_label': config_data['button_label'],
-                    'button_emoji': config_data.get('button_emoji'),
-                    'title_format': config_data['title_format'],
-                    'open_message': config_data['open_message'],
-                    'handle_channel_id': config_data['handle_channel_id'],
-                    'transcripts_channel_id': config_data.get('transcripts_channel_id'),
+                    'button_label': self.config_data['button_label'],
+                    'button_emoji': self.config_data.get('button_emoji'),
+                    'title_format': self.config_data['title_format'],
+                    'open_message': self.config_data['open_message'],
+                    'handle_channel_id': self.config_data['handle_channel_id'],
+                    'transcripts_channel_id': self.config_data.get('transcripts_channel_id'),
                     'created_at': datetime.now(timezone.utc).isoformat()
                 }],
                 "created_at": datetime.now(timezone.utc).isoformat()
@@ -104,10 +201,10 @@ class SingleTicketSetupView(View):
                 color=discord.Color.green()
             )
             
-            emoji_str = f"{config_data.get('button_emoji', '')} " if config_data.get('button_emoji') else ""
+            emoji_str = f"{self.config_data.get('button_emoji', '')} " if self.config_data.get('button_emoji') else ""
             embed.add_field(
                 name="📋 Support Option",
-                value=f"• {emoji_str}**{config_data['button_label']}**",
+                value=f"• {emoji_str}**{self.config_data['button_label']}**",
                 inline=False
             )
             
@@ -157,6 +254,10 @@ class MultiTicketSetupView(View):
             # Prepare multi-ticket options
             multi_options = []
             for option in self.ticket_options:
+                if 'handle_channel_id' not in option:
+                    await interaction.response.send_message(f"❌ Option '{option['button_label']}' is missing handle channel!", ephemeral=True)
+                    return
+                    
                 multi_options.append({
                     'id': uuid.uuid4().hex[:6],
                     'button_label': option['button_label'],
@@ -409,9 +510,6 @@ class MultiTicketView(View):
 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
-
-# Keep the existing JoinTicketView, CloseReasonModal, CloseTicketView, ConfirmCloseView classes
-# (They remain the same as in the previous version)
 
 class Tickets(commands.Cog):
     def __init__(self, bot):
