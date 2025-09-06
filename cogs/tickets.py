@@ -132,7 +132,7 @@ class SingleTicketSetupView(View):
         self.channel = channel
         self.panel_title = panel_title
         self.panel_description = panel_description
-        self.config_data = None  # Store config data
+        self.config_data = None
 
     @discord.ui.button(label="Configure Ticket", style=discord.ButtonStyle.primary, emoji="⚙️", row=0)
     async def configure_ticket(self, interaction: discord.Interaction, button: Button):
@@ -142,15 +142,31 @@ class SingleTicketSetupView(View):
         
         if hasattr(modal, 'config_data'):
             self.config_data = modal.config_data
-            # Create the panel immediately after configuration
-            await self.create_single_ticket_panel(interaction)
+            # Enable the create panel button
+            self.create_panel.disabled = False
+            await interaction.edit_original_response(
+                content=f"✅ Configuration saved! Click 'Create Panel' to create the ticket panel.\n**Option:** {self.config_data['button_label']}",
+                view=self
+            )
 
-    async def create_single_ticket_panel(self, interaction: discord.Interaction):
-        if not self.config_data or 'handle_channel_id' not in self.config_data:
-            await interaction.followup.send("❌ Please configure the ticket options first!", ephemeral=True)
+    @discord.ui.button(label="Create Panel", style=discord.ButtonStyle.success, emoji="🚀", row=1, disabled=True)
+    async def create_panel(self, interaction: discord.Interaction, button: Button):
+        if not self.config_data:
+            await interaction.response.send_message("❌ Please configure the ticket options first!", ephemeral=True)
             return
 
+        await self.create_single_ticket_panel(interaction)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger, emoji="❌", row=1)
+    async def cancel(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.edit_message(content="❌ Cancelled panel creation.", view=None)
+
+    async def create_single_ticket_panel(self, interaction: discord.Interaction):
         try:
+            if not self.config_data or 'handle_channel_id' not in self.config_data:
+                await interaction.response.send_message("❌ Please configure the ticket options first!", ephemeral=True)
+                return
+
             guild_id = str(interaction.guild.id)
             setup_id = uuid.uuid4().hex[:8]
             
@@ -212,13 +228,16 @@ class SingleTicketSetupView(View):
             view = MultiTicketView(guild_id, setup_id)
             message = await self.channel.send(embed=embed, view=view)
 
-            await interaction.followup.send(
-                f"✅ Single ticket panel created successfully!\n**ID:** `{setup_id}`\n**Channel:** {self.channel.mention}\n**Message:** {message.jump_url}",
-                ephemeral=True
+            await interaction.response.edit_message(
+                content=f"✅ Single ticket panel created successfully!\n**ID:** `{setup_id}`\n**Channel:** {self.channel.mention}\n**Message:** {message.jump_url}",
+                view=None
             )
             
         except Exception as e:
-            await interaction.followup.send(f"❌ Error creating panel: {str(e)}", ephemeral=True)
+            await interaction.response.edit_message(
+                content=f"❌ Error creating panel: {str(e)}",
+                view=None
+            )
 
 class MultiTicketSetupView(View):
     def __init__(self, channel: discord.TextChannel, panel_title: str, panel_description: str):
