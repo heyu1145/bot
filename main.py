@@ -17,7 +17,7 @@ logger.info("Starting keep_alive server...")
 keep_alive_success = keep_alive()
 
 if not keep_alive_success:
-logger.warning("keep_alive server failed to start, but the bot running, the bot will offline after idle 5 minutes!")
+    logger.warning("keep_alive server failed to start, but the bot running, the bot will offline after idle 5 minutes!")
 
 # Load environment variables
 TOKEN = os.getenv('TOKEN')
