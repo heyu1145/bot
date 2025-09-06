@@ -33,7 +33,7 @@ intents.guild_scheduled_events = True
 intents.members = True
 intents.messages = True
 
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 bot.start_time = time.time()
 
 # Uptime function - ADDED
