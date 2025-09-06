@@ -1,5 +1,10 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from threading import Thread
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('HTTPService')
+logger.setLevel(logging.INFO)
 
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -14,7 +19,7 @@ class SimpleHandler(BaseHTTPRequestHandler):
 
 def run_server():
     server = HTTPServer(('0.0.0.0', 8080), SimpleHandler)
-    print("✅ Keep-alive server started on port 8080")
+    logger.info("✅ Keep-alive server started on port 8080")
     server.serve_forever()
 
 def keep_alive():
