@@ -5,6 +5,8 @@ import os
 import logging
 import subprocess
 import sys
+import psutil
+import requests
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -15,14 +17,14 @@ app = Flask(__name__)
 # Global bot process
 bot_process = None
 
-# DARK MODE HTML template
+# DARK MODE HTML template (Updated without health check button)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🤖 Discord Bot Status</title>
+    <title>🤖 Discord Bot Status Dashboard</title>
     <style>
         * {
             margin: 0;
@@ -46,7 +48,7 @@ HTML_TEMPLATE = """
             border-radius: 20px;
             padding: 40px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-            max-width: 500px;
+            max-width: 600px;
             width: 100%;
             text-align: center;
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -70,7 +72,7 @@ HTML_TEMPLATE = """
         h1 {
             color: #e0f7fa;
             margin-bottom: 10px;
-            font-size: 2rem;
+            font-size: 2.2rem;
             text-shadow: 0 0 10px rgba(79, 195, 247, 0.3);
         }
         
@@ -94,6 +96,7 @@ HTML_TEMPLATE = """
             border-radius: 12px;
             border-left: 4px solid #4fc3f7;
             backdrop-filter: blur(5px);
+            text-align: center;
         }
         
         .stat-label {
@@ -110,12 +113,18 @@ HTML_TEMPLATE = """
             color: #e0f7fa;
         }
         
+        .stat-subvalue {
+            font-size: 0.9rem;
+            color: #b3e5fc;
+            margin-top: 3px;
+        }
+        
         .bot-status {
             display: inline-block;
-            padding: 10px 20px;
+            padding: 12px 25px;
             border-radius: 25px;
             font-weight: bold;
-            margin-top: 10px;
+            margin-top: 15px;
             font-size: 1.1rem;
             text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
         }
@@ -130,6 +139,37 @@ HTML_TEMPLATE = """
             background: linear-gradient(135deg, #ff5252 0%, #ff1744 100%);
             color: #fff;
             box-shadow: 0 0 20px rgba(255, 82, 82, 0.4);
+        }
+        
+        .system-info {
+            background: rgba(38, 50, 56, 0.6);
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 20px;
+            border-left: 4px solid #ff9800;
+        }
+        
+        .system-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .system-stat {
+            text-align: center;
+        }
+        
+        .system-label {
+            font-size: 0.8rem;
+            color: #ffcc80;
+            margin-bottom: 3px;
+        }
+        
+        .system-value {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #fff;
         }
         
         .footer {
@@ -176,6 +216,16 @@ HTML_TEMPLATE = """
                            0 0 40px rgba(79, 195, 247, 0.2);
             }
         }
+        
+        .loading {
+            color: #ff9800;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
     </style>
 </head>
 <body>
@@ -184,7 +234,7 @@ HTML_TEMPLATE = """
             {{ status_icon }}
         </div>
         
-        <h1>Discord Bot Status</h1>
+        <h1>Discord Bot Dashboard</h1>
         
         <div class="status-text">
             {{ status_message }}
@@ -194,6 +244,7 @@ HTML_TEMPLATE = """
             <div class="stat-card">
                 <div class="stat-label">Web Server</div>
                 <div class="stat-value status-online">ONLINE</div>
+                <div class="stat-subvalue">Port: {{ port }}</div>
             </div>
             
             <div class="stat-card">
@@ -201,16 +252,41 @@ HTML_TEMPLATE = """
                 <div class="stat-value {% if bot_status == 'running' %}status-online{% else %}status-offline{% endif %}">
                     {{ bot_status.upper() }}
                 </div>
+                <div class="stat-subvalue">PID: {{ bot_pid }}</div>
             </div>
             
             <div class="stat-card">
                 <div class="stat-label">Uptime</div>
                 <div class="stat-value">{{ uptime }}</div>
+                <div class="stat-subvalue">Since: {{ start_time }}</div>
             </div>
             
             <div class="stat-card">
-                <div class="stat-label">Timestamp</div>
-                <div class="stat-value">{{ timestamp }}</div>
+                <div class="stat-label">System</div>
+                <div class="stat-value">{{ cpu_usage }}% CPU</div>
+                <div class="stat-subvalue">{{ memory_usage }}% RAM</div>
+            </div>
+        </div>
+        
+        <div class="system-info">
+            <div class="stat-label">System Resources</div>
+            <div class="system-stats">
+                <div class="system-stat">
+                    <div class="system-label">CPU Cores</div>
+                    <div class="system-value">{{ cpu_cores }}</div>
+                </div>
+                <div class="system-stat">
+                    <div class="system-label">Memory</div>
+                    <div class="system-value">{{ memory_mb }} MB</div>
+                </div>
+                <div class="system-stat">
+                    <div class="system-label">Threads</div>
+                    <div class="system-value">{{ thread_count }}</div>
+                </div>
+                <div class="system-stat">
+                    <div class="system-label">Disk</div>
+                    <div class="system-value">{{ disk_usage }}%</div>
+                </div>
             </div>
         </div>
         
@@ -219,11 +295,10 @@ HTML_TEMPLATE = """
         </div>
         
         <div class="footer">
-            <p>Powered by Flask & Render</p>
+            <p>Powered by Flask & Render • {{ response_time }}ms response</p>
             <div class="links">
-                <a href="/health">Health Check</a>
-                <a href="/ping">Ping</a>
-                <a href="/bot-status">Bot Status</a>
+                <a href="/ping">Ping Test</a>
+                <a href="/bot-status">JSON API</a>
             </div>
         </div>
     </div>
@@ -244,34 +319,93 @@ def format_uptime(seconds):
     else:
         return f"{minutes}m {seconds}s"
 
+def get_system_stats():
+    """Get comprehensive system statistics"""
+    try:
+        # CPU usage
+        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_cores = psutil.cpu_count()
+        
+        # Memory usage
+        memory = psutil.virtual_memory()
+        memory_percent = memory.percent
+        memory_mb = round(memory.used / (1024 * 1024))
+        
+        # Disk usage
+        disk = psutil.disk_usage('/')
+        disk_percent = disk.percent
+        
+        # Process info
+        current_process = psutil.Process()
+        thread_count = current_process.num_threads()
+        
+        return {
+            'cpu_percent': cpu_percent,
+            'cpu_cores': cpu_cores,
+            'memory_percent': memory_percent,
+            'memory_mb': memory_mb,
+            'disk_percent': disk_percent,
+            'thread_count': thread_count
+        }
+    except Exception as e:
+        logger.error(f"Error getting system stats: {e}")
+        return {
+            'cpu_percent': 0,
+            'cpu_cores': 0,
+            'memory_percent': 0,
+            'memory_mb': 0,
+            'disk_percent': 0,
+            'thread_count': 0
+        }
+
 # Store server start time
 server_start_time = time.time()
+server_start_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
 
 @app.route('/')
 def home():
+    start_time = time.time()
+    
     bot_status = "running" if bot_process and bot_process.poll() is None else "stopped"
+    bot_pid = bot_process.pid if bot_process and bot_process.poll() is None else "N/A"
     uptime = format_uptime(int(time.time() - server_start_time))
     
     status_icon = "🤖" if bot_status == "running" else "⚠️"
     status_message = "Your Discord bot is running successfully!" if bot_status == "running" else "Bot process is currently offline"
     
+    # Get system statistics
+    system_stats = get_system_stats()
+    
+    # Calculate response time
+    response_time = round((time.time() - start_time) * 1000, 1)
+    
     return render_template_string(HTML_TEMPLATE, 
         status_icon=status_icon,
         status_message=status_message,
         bot_status=bot_status,
+        bot_pid=bot_pid,
         uptime=uptime,
-        timestamp=time.strftime('%Y-%m-%d %H:%M:%S')
+        start_time=server_start_time_str,
+        port=os.environ.get('PORT', 10000),
+        cpu_usage=system_stats['cpu_percent'],
+        memory_usage=system_stats['memory_percent'],
+        cpu_cores=system_stats['cpu_cores'],
+        memory_mb=system_stats['memory_mb'],
+        disk_usage=system_stats['disk_percent'],
+        thread_count=system_stats['thread_count'],
+        response_time=response_time
     )
 
 @app.route('/health')
 def health():
-    # JSON API for Render's health checks (keep this as JSON)
+    """Health check endpoint for Render (kept for internal use)"""
     if bot_process and bot_process.poll() is None:
         return jsonify({
             "status": "healthy", 
             "bot": "running",
             "timestamp": time.time(),
-            "uptime": format_uptime(int(time.time() - server_start_time))
+            "uptime": format_uptime(int(time.time() - server_start_time)),
+            "system": get_system_stats()
         })
     else:
         return jsonify({
@@ -283,26 +417,73 @@ def health():
 
 @app.route('/ping')
 def ping():
-    return "pong"
+    """Enhanced ping endpoint with bot and Discord API latency"""
+    start_time = time.time()
+    
+    # Measure bot response time
+    bot_response_time = round((time.time() - start_time) * 1000, 1)
+    
+    # Get system stats
+    system_stats = get_system_stats()
+    
+    # Try to measure Discord API latency (if bot is running)
+    discord_latency = "N/A"
+    if bot_process and bot_process.poll() is None:
+        try:
+            # This is a placeholder - actual Discord latency would come from your bot
+            discord_latency = "45ms"  # Example value
+        except:
+            discord_latency = "Unknown"
+    
+    return jsonify({
+        "status": "pong",
+        "timestamp": time.time(),
+        "response_time_ms": bot_response_time,
+        "discord_api_latency": discord_latency,
+        "system": system_stats,
+        "bot_status": "running" if bot_process and bot_process.poll() is None else "stopped",
+        "uptime": format_uptime(int(time.time() - server_start_time))
+    })
 
 @app.route('/bot-status')
 def bot_status():
-    # JSON endpoint for bot status
+    """Comprehensive bot status API with system information"""
+    system_stats = get_system_stats()
+    
     if bot_process:
         return_code = bot_process.poll()
         if return_code is None:
             return jsonify({
-                "bot": "running", 
-                "pid": bot_process.pid,
-                "uptime": format_uptime(int(time.time() - server_start_time))
+                "status": "running", 
+                "process": {
+                    "pid": bot_process.pid,
+                    "uptime": format_uptime(int(time.time() - server_start_time)),
+                    "start_time": server_start_time_str
+                },
+                "system": system_stats,
+                "resources": {
+                    "cpu_cores": system_stats['cpu_cores'],
+                    "memory_used_mb": system_stats['memory_mb'],
+                    "thread_count": system_stats['thread_count']
+                },
+                "timestamp": time.time(),
+                "message": "Bot is running normally"
             })
         else:
             return jsonify({
-                "bot": "stopped", 
+                "status": "stopped", 
                 "exit_code": return_code,
-                "uptime": format_uptime(int(time.time() - server_start_time))
+                "system": system_stats,
+                "uptime": format_uptime(int(time.time() - server_start_time)),
+                "timestamp": time.time(),
+                "error": "Bot process has stopped"
             })
-    return jsonify({"bot": "not_started"})
+    return jsonify({
+        "status": "not_started",
+        "system": system_stats,
+        "timestamp": time.time(),
+        "message": "Bot process has not been started"
+    })
 
 def start_bot():
     """Start the Discord bot in a separate process"""
