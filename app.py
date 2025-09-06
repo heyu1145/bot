@@ -646,8 +646,6 @@ def start_bot():
         # Use the same Python executable and run bot.py
         bot_process = subprocess.Popen(
             [sys.executable, "bot.py"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
             text=True,
             bufsize=1,
             universal_newlines=True
@@ -655,26 +653,6 @@ def start_bot():
         
         logger.info(f"✅ Discord bot process started with PID: {bot_process.pid}")
         
-        # Log bot output in background threads
-        def log_stdout():
-            while True:
-                if bot_process.poll() is not None:
-                    break
-                output = bot_process.stdout.readline()
-                if output:
-                    logger.info(f"BOT: {output.strip()}")
-        
-        def log_stderr():
-            while True:
-                if bot_process.poll() is not None:
-                    break
-                error = bot_process.stderr.readline()
-                if error:
-                    logger.error(f"BOT-ERROR: {error.strip()}")
-        
-        # Start loggers
-        threading.Thread(target=log_stdout, daemon=True).start()
-        threading.Thread(target=log_stderr, daemon=True).start()
         
     except Exception as e:
         logger.error(f"❌ Failed to start bot: {e}")
