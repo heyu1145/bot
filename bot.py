@@ -57,6 +57,7 @@ async def load_cogs():
         await bot.load_extension('cogs.events')
         await bot.load_extension('cogs.data_management')
         await bot.load_extension('cogs.admin')
+        await bot.load_extension('cogs.help')
         logger.info("✅ All cogs loaded successfully")
     except Exception as e:
         logger.error(f"❌ Failed to load cogs: {e}")
@@ -78,7 +79,7 @@ async def on_ready():
     await bot.change_presence(
         activity=discord.Activity(
             type=discord.ActivityType.watching,
-            name=f"{len(bot.guilds)} servers | /help"
+            name=f"{len(bot.guilds)} servers | use /help to get all commands!"
         )
     )
 

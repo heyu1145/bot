@@ -16,7 +16,6 @@ from utils.storage import (
     load_user_ticket_counts
 )
 from utils.permissions import is_admin_or_owner, has_event_access
-from utils.helpers import generate_transcript
 
 # Add the missing JoinTicketView class
 class JoinTicketView(View):
@@ -64,29 +63,6 @@ class ConfirmCloseView(View):
         try:
             thread = interaction.guild.get_thread(int(self.thread_id))
             if thread:
-                # Generate transcript first (before archiving)
-                transcript = await generate_transcript(thread, self.reason, interaction.user)
-                
-                # Get ticket data
-                ticket_data = get_ticket_data(self.guild_id, self.thread_id)
-                if ticket_data and 'transcripts_channel_id' in ticket_data:
-                    try:
-                        transcripts_channel = interaction.guild.get_channel(int(ticket_data['transcripts_channel_id']))
-                        if transcripts_channel:
-                            # Create a file with the transcript content
-                            transcript_bytes = transcript.encode('utf-8')
-                            transcript_file = discord.File(
-                                discord.utils.BytesIO(transcript_bytes), 
-                                filename=f"transcript-{thread.name}.txt"
-                            )
-                            await transcripts_channel.send(
-                                f"📋 Transcript for {thread.mention} (Closed by {interaction.user.mention})", 
-                                file=transcript_file
-                            )
-                    except Exception as e:
-                        print(f"Error sending transcript: {e}")
-                        # You might want to send the transcript to a fallback channel or log the error
-                
                 # Archive the thread
                 await thread.edit(archived=True, locked=True)
                 
@@ -99,9 +75,6 @@ class ConfirmCloseView(View):
         except Exception as e:
             await interaction.response.send_message(f"❌ Error closing ticket: {str(e)}", ephemeral=True)
 
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
-    async def cancel_close(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.edit_message(content="Ticket closure cancelled.", view=None)
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
     async def cancel_close(self, interaction: discord.Interaction, button: Button):
         await interaction.response.edit_message(content="Ticket closure cancelled.", view=None)
