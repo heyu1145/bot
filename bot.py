@@ -11,7 +11,7 @@ from utils.permissions import has_data_access
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('discord')
 logger.setLevel(logging.INFO)
-logger.propagate = False
+logger.propagate = True
 
 # Load environment variables - KEPT AS IS
 TOKEN = os.getenv('TOKEN')
@@ -57,7 +57,7 @@ async def load_cogs():
         await bot.load_extension('cogs.events')
         await bot.load_extension('cogs.data_management')
         await bot.load_extension('cogs.admin')
-        await bot.load_extension('cogs.help')
+        await bot.load_extension('cogs.helper')
         logger.info("✅ All cogs loaded successfully")
     except Exception as e:
         logger.error(f"❌ Failed to load cogs: {e}")
