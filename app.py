@@ -299,6 +299,7 @@ HTML_TEMPLATE = """
             <div class="links">
                 <a href="/ping">Ping Test</a>
                 <a href="/bot-status">JSON API</a>
+                <a href="/health">Health Check</a>
             </div>
         </div>
     </div>
@@ -398,7 +399,7 @@ def home():
 
 @app.route('/health')
 def health():
-    """Health check endpoint for Render (kept for internal use)"""
+    """Health check endpoint for Render"""
     if bot_process and bot_process.poll() is None:
         return jsonify({
             "status": "healthy", 
@@ -417,7 +418,7 @@ def health():
 
 @app.route('/ping')
 def ping():
-    """Enhanced ping endpoint with bot and Discord API latency"""
+    """Enhanced ping endpoint"""
     start_time = time.time()
     
     # Measure bot response time
@@ -426,20 +427,10 @@ def ping():
     # Get system stats
     system_stats = get_system_stats()
     
-    # Try to measure Discord API latency (if bot is running)
-    discord_latency = "N/A"
-    if bot_process and bot_process.poll() is None:
-        try:
-            # This is a placeholder - actual Discord latency would come from your bot
-            discord_latency = "45ms"  # Example value
-        except:
-            discord_latency = "Unknown"
-    
     return jsonify({
         "status": "pong",
         "timestamp": time.time(),
         "response_time_ms": bot_response_time,
-        "discord_api_latency": discord_latency,
         "system": system_stats,
         "bot_status": "running" if bot_process and bot_process.poll() is None else "stopped",
         "uptime": format_uptime(int(time.time() - server_start_time))
@@ -447,7 +438,7 @@ def ping():
 
 @app.route('/bot-status')
 def bot_status():
-    """Comprehensive bot status API with system information"""
+    """Comprehensive bot status API"""
     system_stats = get_system_stats()
     
     if bot_process:
@@ -496,7 +487,9 @@ def start_bot():
             [sys.executable, "bot.py"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
+            bufsize=1,  # Line buffered
+            universal_newlines=True
         )
         
         logger.info(f"✅ Discord bot process started with PID: {bot_process.pid}")
@@ -504,17 +497,17 @@ def start_bot():
         # Log bot output in background threads
         def log_stdout():
             while True:
-                output = bot_process.stdout.readline()
-                if output == '' and bot_process.poll() is not None:
+                if bot_process.poll() is not None:
                     break
+                output = bot_process.stdout.readline()
                 if output:
                     logger.info(f"BOT: {output.strip()}")
         
         def log_stderr():
             while True:
-                error = bot_process.stderr.readline()
-                if error == '' and bot_process.poll() is not None:
+                if bot_process.poll() is not None:
                     break
+                error = bot_process.stderr.readline()
                 if error:
                     logger.error(f"BOT-ERROR: {error.strip()}")
         
@@ -536,6 +529,20 @@ def monitor_bot():
     
     threading.Thread(target=monitor, daemon=True).start()
 
+def start_ping_service():
+    """Ping the service periodically to keep it awake"""
+    def ping_self():
+        while True:
+            try:
+                base_url = os.environ.get('RENDER_EXTERNAL_URL', 'http://localhost:10000')
+                response = requests.get(f"{base_url}/ping", timeout=10)
+                logger.info(f"🔄 Self-ping successful: {response.status_code}")
+            except Exception as e:
+                logger.warning(f"⚠️ Self-ping failed: {e}")
+            time.sleep(300)  # Ping every 5 minutes
+    
+    threading.Thread(target=ping_self, daemon=True).start()
+
 if __name__ == '__main__':
     # Start the bot when the web server starts
     start_bot()
@@ -543,10 +550,17 @@ if __name__ == '__main__':
     # Start bot monitor
     monitor_bot()
     
+    # Start self-ping service to keep awake
+    start_ping_service()
+    
     # Start Flask server on Render's assigned port
     port = int(os.environ.get('PORT', 10000))
     logger.info(f"🌐 Starting web server on port {port}")
     
-    # Production server - no debug messages
-    from waitress import serve
-    serve(app, host='0.0.0.0', port=port, threads=4, _quiet=True)
+    # Use Waitress for production if available, else use Flask dev server
+    try:
+        from waitress import serve
+        serve(app, host='0.0.0.0', port=port, threads=4, _quiet=True)
+    except ImportError:
+        logger.warning("⚠️ Waitress not found, using Flask development server")
+        app.run(host='0.0.0.0', port=port, debug=False)
