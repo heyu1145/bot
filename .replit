@@ -1,4 +1,4 @@
-entrypoint = "main.py"
+entrypoint = "app.py"
 modules = ["python-3.10"]
 
 hidden = [".pythonlibs"]
@@ -7,7 +7,7 @@ hidden = [".pythonlibs"]
 channel = "stable-23_05"
 
 [deployment]
-run = ["python", "main.py"]
+run = ["python", "app.py"]
 deploymentTarget = "gce"
 ignorePorts = true
 
@@ -18,6 +18,10 @@ externalPort = 80
 [[ports]]
 localPort = 8083
 externalPort = 3000
+
+[[ports]]
+localPort = 10000
+externalPort = 3001
 
 [agent]
 expertMode = true
