@@ -5,6 +5,7 @@ import json
 import os
 from datetime import datetime, timezone
 from typing import List
+import asyncio
 
 from utils.storage import (
     load_ticket_configs, load_multi_ticket_configs, load_active_tickets,
@@ -34,12 +35,12 @@ class DataManagement(commands.Cog):
         app_commands.Choice(name="🌐 User Timezones", value="user_timezones")
     ])
     async def export_data(self, interaction: discord.Interaction, data_type: app_commands.Choice[str]):
-        await interaction.response.send_message(f"🔄 Exporting {data_type.name}...", ephemeral=True)
-        
-        if not has_data_access(interaction):
-            return await interaction.edit_original_response(content="❌ Access denied. Administrator or staff role required.")
-        
         try:
+            if not has_data_access(interaction):
+                return await interaction.response.send_message("❌ Access denied.", ephemeral=True)
+            
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
             guild_id = str(interaction.guild.id)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             files = []
@@ -87,8 +88,11 @@ class DataManagement(commands.Cog):
                 files.append(discord.File(filename))
             
             if files:
-                await interaction.followup.send(files=files, ephemeral=True)
-                await interaction.edit_original_response(content=f"✅ Exported {data_type.name} for server {interaction.guild.name}")
+                await interaction.followup.send(
+                    f"✅ Exported {data_type.name} for server {interaction.guild.name}",
+                    files=files,
+                    ephemeral=True
+                )
                 
                 for file in files:
                     try:
@@ -96,10 +100,10 @@ class DataManagement(commands.Cog):
                     except:
                         pass
             else:
-                await interaction.edit_original_response(content="❌ No data to export.")
+                await interaction.followup.send("❌ No data to export.", ephemeral=True)
                 
         except Exception as e:
-            await interaction.edit_original_response(content=f"❌ Error exporting data: {str(e)}")
+            await interaction.followup.send(f"❌ Error exporting data: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="import_data", description="Import data from JSON files")
     @app_commands.describe(
@@ -115,68 +119,68 @@ class DataManagement(commands.Cog):
         app_commands.Choice(name="🌐 User Timezones", value="user_timezones")
     ])
     async def import_data(self, interaction: discord.Interaction, json_file: discord.Attachment, data_type: app_commands.Choice[str]):
-        await interaction.response.send_message("🔄 Importing data...", ephemeral=True)
-        
-        if not has_data_access(interaction):
-            return await interaction.edit_original_response(content="❌ Access denied.")
-        
-        if not json_file.filename.endswith('.json'):
-            return await interaction.edit_original_response(content="❌ Please upload a JSON file!")
-        
         try:
+            if not has_data_access(interaction):
+                return await interaction.response.send_message("❌ Access denied.", ephemeral=True)
+            
+            if not json_file.filename.endswith('.json'):
+                return await interaction.response.send_message("❌ Please upload a JSON file!", ephemeral=True)
+            
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
             content = await json_file.read()
             data = json.loads(content.decode('utf-8'))
             guild_id = str(interaction.guild.id)
             
             if data_type.value == "ticket_configs":
                 if not isinstance(data, list):
-                    return await interaction.edit_original_response(content="❌ Invalid format for ticket configs! Expected array.")
+                    return await interaction.followup.send("❌ Invalid format for ticket configs! Expected array.", ephemeral=True)
                 save_json_data(guild_id, "ticket_configs.json", data)
-                await interaction.edit_original_response(content="✅ Ticket configs imported successfully!")
+                await interaction.followup.send("✅ Ticket configs imported successfully!", ephemeral=True)
             
             elif data_type.value == "multi_ticket_configs":
                 if not isinstance(data, list):
-                    return await interaction.edit_original_response(content="❌ Invalid format for multi-ticket configs! Expected array.")
+                    return await interaction.followup.send("❌ Invalid format for multi-ticket configs! Expected array.", ephemeral=True)
                 save_json_data(guild_id, "multi_ticket_configs.json", data)
-                await interaction.edit_original_response(content="✅ Multi-ticket configs imported successfully!")
+                await interaction.followup.send("✅ Multi-ticket configs imported successfully!", ephemeral=True)
             
             elif data_type.value == "active_tickets":
                 if not isinstance(data, dict):
-                    return await interaction.edit_original_response(content="❌ Invalid format for active tickets! Expected object.")
+                    return await interaction.followup.send("❌ Invalid format for active tickets! Expected object.", ephemeral=True)
                 save_json_data(guild_id, "active_tickets.json", data)
-                await interaction.edit_original_response(content="✅ Active tickets imported successfully!")
+                await interaction.followup.send("✅ Active tickets imported successfully!", ephemeral=True)
             
             elif data_type.value == "user_ticket_counts":
                 if not isinstance(data, dict):
-                    return await interaction.edit_original_response(content="❌ Invalid format for user ticket counts! Expected object.")
+                    return await interaction.followup.send("❌ Invalid format for user ticket counts! Expected object.", ephemeral=True)
                 save_json_data(guild_id, "user_ticket_counts.json", data)
-                await interaction.edit_original_response(content="✅ User ticket counts imported successfully!")
+                await interaction.followup.send("✅ User ticket counts imported successfully!", ephemeral=True)
             
             elif data_type.value == "staff_roles":
                 if not isinstance(data, list):
-                    return await interaction.edit_original_response(content="❌ Invalid format for staff roles! Expected array.")
+                    return await interaction.followup.send("❌ Invalid format for staff roles! Expected array.", ephemeral=True)
                 save_json_data(guild_id, "staff_roles.json", data)
-                await interaction.edit_original_response(content="✅ Staff roles imported successfully!")
+                await interaction.followup.send("✅ Staff roles imported successfully!", ephemeral=True)
             
             elif data_type.value == "user_timezones":
                 if not isinstance(data, dict):
-                    return await interaction.edit_original_response(content="❌ Invalid format for user timezones! Expected object.")
+                    return await interaction.followup.send("❌ Invalid format for user timezones! Expected object.", ephemeral=True)
                 save_json_data(guild_id, "user_timezones.json", data)
-                await interaction.edit_original_response(content="✅ User timezones imported successfully!")
+                await interaction.followup.send("✅ User timezones imported successfully!", ephemeral=True)
             
         except json.JSONDecodeError:
-            await interaction.edit_original_response(content="❌ Invalid JSON file format!")
+            await interaction.followup.send("❌ Invalid JSON file format!", ephemeral=True)
         except Exception as e:
-            await interaction.edit_original_response(content=f"❌ Error importing data: {str(e)}")
+            await interaction.followup.send(f"❌ Error importing data: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="view_data_stats", description="View server data statistics")
     async def view_data_stats(self, interaction: discord.Interaction):
-        await interaction.response.send_message("📊 Loading statistics...", ephemeral=True)
-        
-        if not has_data_access(interaction):
-            return await interaction.edit_original_response(content="❌ Access denied.")
-        
         try:
+            if not has_data_access(interaction):
+                return await interaction.response.send_message("❌ Access denied.", ephemeral=True)
+            
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
             guild_id = str(interaction.guild.id)
             ticket_configs = load_ticket_configs(guild_id)
             multi_configs = load_multi_ticket_configs(guild_id)
@@ -202,10 +206,10 @@ class DataManagement(commands.Cog):
             
             embed.set_footer(text=f"Server ID: {guild_id}")
             
-            await interaction.edit_original_response(content=None, embed=embed)
+            await interaction.followup.send(embed=embed, ephemeral=True)
             
         except Exception as e:
-            await interaction.edit_original_response(content=f"❌ Error loading data: {str(e)}")
+            await interaction.followup.send(f"❌ Error loading data: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="clear_data", description="Clear specific server data (DANGEROUS)")
     @app_commands.describe(data_type="Type of data to clear")
@@ -215,58 +219,56 @@ class DataManagement(commands.Cog):
         app_commands.Choice(name="🌐 User Timezones", value="user_timezones")
     ])
     async def clear_data(self, interaction: discord.Interaction, data_type: app_commands.Choice[str]):
-        await interaction.response.send_message("🔄 Clearing data...", ephemeral=True)
-        
-        if not has_data_access(interaction):
-            return await interaction.edit_original_response(content="❌ Access denied.")
-        
         try:
+            if not has_data_access(interaction):
+                return await interaction.response.send_message("❌ Access denied.", ephemeral=True)
+            
             guild_id = str(interaction.guild.id)
             
             if data_type.value == "active_tickets":
                 save_json_data(guild_id, "active_tickets.json", {})
-                await interaction.edit_original_response(content="✅ Active tickets cleared successfully!")
+                await interaction.response.send_message("✅ Active tickets cleared successfully!", ephemeral=True)
             
             elif data_type.value == "user_ticket_counts":
                 save_json_data(guild_id, "user_ticket_counts.json", {})
-                await interaction.edit_original_response(content="✅ User ticket counts cleared successfully!")
+                await interaction.response.send_message("✅ User ticket counts cleared successfully!", ephemeral=True)
             
             elif data_type.value == "user_timezones":
                 save_json_data(guild_id, "user_timezones.json", {})
-                await interaction.edit_original_response(content="✅ User timezones cleared successfully!")
+                await interaction.response.send_message("✅ User timezones cleared successfully!", ephemeral=True)
                 
         except Exception as e:
-            await interaction.edit_original_response(content=f"❌ Error clearing data: {str(e)}")
+            await interaction.response.send_message(f"❌ Error clearing data: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="backup_data", description="Create a backup of all server data")
     async def backup_data(self, interaction: discord.Interaction):
-        await interaction.response.send_message("🔄 Creating backup...", ephemeral=True)
-        
-        if not has_data_access(interaction):
-            return await interaction.edit_original_response(content="❌ Access denied.")
-        
         try:
+            if not has_data_access(interaction):
+                return await interaction.response.send_message("❌ Access denied.", ephemeral=True)
+            
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
             success = True
             for server_id in get_all_servers_data():
                 if not backup_server_data(server_id):
                     success = False
             
             if success:
-                await interaction.edit_original_response(content="✅ All server data backup created successfully!")
+                await interaction.followup.send("✅ All server data backup created successfully!", ephemeral=True)
             else:
-                await interaction.edit_original_response(content="❌ Some backups failed. Check logs for details.")
+                await interaction.followup.send("❌ Some backups failed. Check logs for details.", ephemeral=True)
                 
         except Exception as e:
-            await interaction.edit_original_response(content=f"❌ Error during backup: {str(e)}")
+            await interaction.followup.send(f"❌ Error during backup: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="export_all_data", description="Export ALL server data as a single JSON file")
     async def export_all_data(self, interaction: discord.Interaction):
-        await interaction.response.send_message("🔄 Exporting all server data...", ephemeral=True)
-        
-        if not has_data_access(interaction):
-            return await interaction.edit_original_response(content="❌ Access denied.")
-        
         try:
+            if not has_data_access(interaction):
+                return await interaction.response.send_message("❌ Access denied.", ephemeral=True)
+            
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
             all_data = export_all_server_data()
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"all_servers_data_{timestamp}.json"
@@ -275,49 +277,52 @@ class DataManagement(commands.Cog):
                 json.dump(all_data, f, indent=2, ensure_ascii=False)
             
             file = discord.File(filename)
-            await interaction.followup.send(file=file, ephemeral=True)
-            await interaction.edit_original_response(content=f"✅ Exported data from {all_data['total_servers']} servers")
+            await interaction.followup.send(
+                f"✅ Exported data from {all_data['total_servers']} servers",
+                file=file,
+                ephemeral=True
+            )
             
             os.remove(filename)
             
         except Exception as e:
-            await interaction.edit_original_response(content=f"❌ Error exporting all server data: {str(e)}")
+            await interaction.followup.send(f"❌ Error exporting all server data: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="import_all_data", description="Import data to ALL servers from JSON file")
     @app_commands.describe(json_file="JSON file containing all server data")
     async def import_all_data(self, interaction: discord.Interaction, json_file: discord.Attachment):
-        await interaction.response.send_message("🔄 Importing all server data...", ephemeral=True)
-        
-        if not has_data_access(interaction):
-            return await interaction.edit_original_response(content="❌ Access denied.")
-        
-        if not json_file.filename.endswith('.json'):
-            return await interaction.edit_original_response(content="❌ Please upload a JSON file!")
-        
         try:
+            if not has_data_access(interaction):
+                return await interaction.response.send_message("❌ Access denied.", ephemeral=True)
+            
+            if not json_file.filename.endswith('.json'):
+                return await interaction.response.send_message("❌ Please upload a JSON file!", ephemeral=True)
+            
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
             content = await json_file.read()
             data = json.loads(content.decode('utf-8'))
             
             success = import_all_server_data(data)
             
             if success:
-                await interaction.edit_original_response(content="✅ All server data imported successfully!")
+                await interaction.followup.send("✅ All server data imported successfully!", ephemeral=True)
             else:
-                await interaction.edit_original_response(content="❌ Error importing data to some servers. Check logs for details.")
+                await interaction.followup.send("❌ Error importing data to some servers. Check logs for details.", ephemeral=True)
                 
         except json.JSONDecodeError:
-            await interaction.edit_original_response(content="❌ Invalid JSON file format!")
+            await interaction.followup.send("❌ Invalid JSON file format!", ephemeral=True)
         except Exception as e:
-            await interaction.edit_original_response(content=f"❌ Error importing all server data: {str(e)}")
+            await interaction.followup.send(f"❌ Error importing all server data: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="view_all_data_stats", description="View statistics for ALL servers")
     async def view_all_data_stats(self, interaction: discord.Interaction):
-        await interaction.response.send_message("📊 Loading all server statistics...", ephemeral=True)
-        
-        if not has_data_access(interaction):
-            return await interaction.edit_original_response(content="❌ Access denied.")
-        
         try:
+            if not has_data_access(interaction):
+                return await interaction.response.send_message("❌ Access denied.", ephemeral=True)
+            
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
             all_servers = get_all_servers_data()
             ticket_configs = load_all_ticket_configs()
             multi_configs = load_all_multi_ticket_configs()
@@ -354,10 +359,10 @@ class DataManagement(commands.Cog):
                     server_list += f"\n• ... and {len(all_servers) - 5} more"
                 embed.add_field(name="📋 Servers", value=server_list, inline=False)
             
-            await interaction.edit_original_response(content=None, embed=embed)
+            await interaction.followup.send(embed=embed, ephemeral=True)
             
         except Exception as e:
-            await interaction.edit_original_response(content=f"❌ Error loading all server data: {str(e)}")
+            await interaction.followup.send(f"❌ Error loading all server data: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="clear_all_data", description="Clear specific data from ALL servers (DANGEROUS)")
     @app_commands.describe(data_type="Type of data to clear")
@@ -367,12 +372,12 @@ class DataManagement(commands.Cog):
         app_commands.Choice(name="🌐 User Timezones", value="user_timezones")
     ])
     async def clear_all_data(self, interaction: discord.Interaction, data_type: app_commands.Choice[str]):
-        await interaction.response.send_message("🔄 Clearing data from all servers...", ephemeral=True)
-        
-        if not has_data_access(interaction):
-            return await interaction.edit_original_response(content="❌ Access denied.")
-        
         try:
+            if not has_data_access(interaction):
+                return await interaction.response.send_message("❌ Access denied.", ephemeral=True)
+            
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            
             cleared_servers = 0
             for server_id in get_all_servers_data():
                 if data_type.value == "active_tickets":
@@ -383,10 +388,10 @@ class DataManagement(commands.Cog):
                     save_json_data(server_id, "user_timezones.json", {})
                 cleared_servers += 1
             
-            await interaction.edit_original_response(content=f"✅ Cleared {data_type.name} from {cleared_servers} servers!")
+            await interaction.followup.send(f"✅ Cleared {data_type.name} from {cleared_servers} servers!", ephemeral=True)
                 
         except Exception as e:
-            await interaction.edit_original_response(content=f"❌ Error clearing data: {str(e)}")
+            await interaction.followup.send(f"❌ Error clearing data: {str(e)}", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(DataManagement(bot))

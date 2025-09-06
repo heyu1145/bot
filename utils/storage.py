@@ -33,7 +33,7 @@ def save_trusted_users(trusted_users: List[int]) -> bool:
         return False
 
 def is_bot_owner(user_id: int) -> bool:
-    from main import OWNER_USER_ID
+    from bot import OWNER_USER_ID
     try:
         return user_id == int(OWNER_USER_ID)
     except ValueError:
