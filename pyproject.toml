@@ -15,6 +15,8 @@ python-dotenv = "^1.1.1"
 waitress = "^2.1.2"
 psutil = "^5.9.0"
 requests = "^2.32.5"
+Fuzzywuzzy = "^0.18.0"
+Python-Levenshtein = "^0.22.0"
 
 [tool.pyright]
 useLibraryCodeForTypes = true
