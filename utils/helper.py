@@ -9,6 +9,5 @@ def get_command_info(bot, cmd: str):
             return {
              "name": command.name,
              "description": command.description,
-             "options": command.options
          }
     return None
