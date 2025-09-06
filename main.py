@@ -1,86 +1,129 @@
 import discord
 from discord.ext import commands
 import os
+import asyncio
 import logging
-from utils.storage import load_trusted_users, is_bot_owner
-from utils.permissions import has_data_access
-from keep_alive import keep_alive
+import time
+from keep_alive import keep_alive, update_bot_status
 
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('discord_bot')
+
+# Start the keep-alive server
 keep_alive()
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('discord')
-logger.setLevel(logging.INFO)
-
-logger.propagate = False
-
-# Load environment variables
-TOKEN = os.getenv('TOKEN')
-OWNER_USER_ID = os.getenv('OWNER_USER_ID')
-
-if not TOKEN:
-    logger.error("❌ ERROR: No Discord token found! Set TOKEN in environment variables")
-    exit(1)
-
-if not OWNER_USER_ID:
-    logger.error("❌ ERROR: No owner user ID found! Set OWNER_USER_ID in environment variables")
-    exit(1)
 
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
-intents.guilds = True
-intents.guild_scheduled_events = True
 intents.members = True
-intents.messages = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Load cogs
+# Load cogs automatically
 async def load_cogs():
-    try:
-        await bot.load_extension('cogs.tickets')
-        await bot.load_extension('cogs.events')
-        await bot.load_extension('cogs.data_management')
-        await bot.load_extension('cogs.admin')
-        logger.info("✅ All cogs loaded successfully")
-    except Exception as e:
-        logger.error(f"❌ Failed to load cogs: {e}")
+    loaded_commands = 0
+    for filename in os.listdir('./cogs'):
+        if filename.endswith('.py'):
+            try:
+                await bot.load_extension(f'cogs.{filename[:-3]}')
+                logger.info(f"Loaded cog: {filename[:-3]}")
+                loaded_commands += 1
+            except Exception as e:
+                logger.error(f"Failed to load cog {filename}: {e}")
+    return loaded_commands
 
 @bot.event
 async def on_ready():
-    bot.start_time = discord.utils.utcnow()
-    logger.info(f'✅ Logged in as {bot.user.name} (ID: {bot.user.id})')
-    logger.info(f'🔗 Connected to {len(bot.guilds)} server(s)')
+    # Count total users across all servers
+    total_users = sum(guild.member_count for guild in bot.guilds)
     
-    await load_cogs()
+    # Update status
+    update_bot_status(
+        online=True,
+        servers=len(bot.guilds),
+        commands_loaded=len(bot.commands),
+        users=total_users
+    )
     
+    logger.info(f"Logged in as {bot.user.name}")
+    logger.info(f"Bot ID: {bot.user.id}")
+    logger.info(f"Connected to {len(bot.guilds)} server(s)")
+    logger.info(f"Serving {total_users} users")
+    
+    # Sync slash commands
     try:
         synced = await bot.tree.sync()
-        logger.info(f"✅ Synced {len(synced)} slash command(s)")
+        logger.info(f"Synced {len(synced)} command(s)")
     except Exception as e:
-        logger.error(f"❌ Command sync failed: {e}")
+        logger.error(f"Failed to sync commands: {e}")
 
-# Basic commands
-@bot.tree.command(name="ping", description="Check the bot's response time")
+# Error handling
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    logger.error(f"Command error: {error}")
+
+# Ping command
+@bot.tree.command(name="ping", description="Check bot latency and status")
 async def ping(interaction: discord.Interaction):
-    latency = round(bot.latency * 1000)
-    await interaction.response.send_message(f"🏓 Pong! Response time: {latency}ms", ephemeral=True)
+    start_time = time.time()
+    
+    # Calculate latency
+    latency = round(bot.latency * 1000)  # Convert to ms
+    
+    # Create embed
+    embed = discord.Embed(
+        title="🏓 Pong!",
+        color=discord.Color.green(),
+        timestamp=discord.utils.utcnow()
+    )
+    
+    embed.add_field(name="Bot Latency", value=f"`{latency}ms`", inline=True)
+    embed.add_field(name="API Latency", value=f"`{round((time.time() - start_time) * 1000)}ms`", inline=True)
+    embed.add_field(name="Servers", value=f"`{len(bot.guilds)}`", inline=True)
+    embed.add_field(name="Uptime", value=f"`{get_uptime()}`", inline=True)
+    embed.add_field(name="Users", value=f"`{sum(guild.member_count for guild in bot.guilds)}`", inline=True)
+    embed.add_field(name="Commands", value=f"`{len(bot.commands)}`", inline=True)
+    
+    embed.set_footer(text=f"Requested by {interaction.user.display_name}")
+    
+    await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="bot_info", description="Get basic bot information")
-async def bot_info(interaction: discord.Interaction):
-    embed = discord.Embed(title="🤖 Bot Information", color=discord.Color.blue())
-    embed.add_field(name="Name", value=bot.user.name, inline=True)
-    embed.add_field(name="ID", value=bot.user.id, inline=True)
-    embed.add_field(name="Servers", value=len(bot.guilds), inline=True)
-    embed.add_field(name="Ping", value=f"{round(bot.latency * 1000)}ms", inline=True)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+def get_uptime():
+    """Calculate bot uptime in human readable format"""
+    if not bot.start_time:
+        return "Not available"
+    
+    uptime_seconds = int(time.time() - bot.start_time)
+    days, remainder = divmod(uptime_seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    
+    if days > 0:
+        return f"{days}d {hours}h {minutes}m"
+    elif hours > 0:
+        return f"{hours}h {minutes}m {seconds}s"
+    else:
+        return f"{minutes}m {seconds}s"
+
+# Store bot start time
+bot.start_time = time.time()
+
+# Run the bot
+async def main():
+    async with bot:
+        loaded_commands = await load_cogs()
+        update_bot_status(commands_loaded=loaded_commands)
+        
+        # Get token from environment variable
+        token = os.getenv('DISCORD_BOT_TOKEN')
+        if not token:
+            logger.error("DISCORD_BOT_TOKEN environment variable not set!")
+            return
+        
+        await bot.start(token)
 
 if __name__ == "__main__":
-    try:
-        bot.run(TOKEN)
-    except discord.LoginFailure:
-        logger.error("❌ Invalid token! Check your environment variables")
-    except Exception as e:
-        logger.error(f"❌ Critical error: {str(e)}")
+    asyncio.run(main())
