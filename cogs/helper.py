@@ -79,24 +79,7 @@ class HelperCog(commands.Cog):
                 name="📋 Description", 
                 value=command_info.get('description', 'No description provided'),
                 inline=False
-            )
-            
-            # Add parameters/options if they exist
-            options = command_info.get('options', [])
-            if options:
-                params_text = "\n".join([f"• `{param.name}`: {param.description} {'(required)' if param.required else '(optional)'}" for param in options])
-                embed.add_field(
-                    name="⚙️ Parameters",
-                    value=params_text,
-                    inline=False
-                )
-            else:
-                embed.add_field(
-                    name="⚙️ Parameters",
-                    value="No parameters required",
-                    inline=False
-                )
-                
+            )     
         else:
             embed.add_field(
                 name="❌ Command Not Found",
