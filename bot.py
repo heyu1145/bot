@@ -78,7 +78,7 @@ async def on_ready():
     # Set bot status - ADDED
     await bot.change_presence(
         activity=discord.Activity(
-            type=discord.ActivityType.listening,
+            type=discord.ActivityType.playing,
             name=f"{len(bot.guilds)} servers | use /help to get all commands!"
         )
     )
@@ -87,7 +87,7 @@ async def on_ready():
 @bot.tree.command(name="ping", description="Check the bot's response time and status")
 async def ping(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
-    api_latency = round((time.time() - interaction.create_at).total_seconds() * 1000)
+    api_latency = round((time.time() - interaction.created_at).total_seconds() * 1000)
     
     embed = discord.Embed(title="🏓 Pong!", color=discord.Color.green())
     embed.add_field(name="Bot Latency", value=f"`{latency}ms`", inline=True)
