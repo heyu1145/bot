@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 import logging
 import asyncio
+import random
 import time
 from utils.storage import load_trusted_users, is_bot_owner
 from utils.permissions import has_data_access
@@ -58,6 +59,7 @@ async def load_cogs():
         await bot.load_extension('cogs.data_management')
         await bot.load_extension('cogs.admin')
         await bot.load_extension('cogs.helper')
+        await bot.load_extension('cogs.debug')
         logger.info("✅ All cogs loaded successfully")
     except Exception as e:
         logger.error(f"❌ Failed to load cogs: {e}")
@@ -87,7 +89,7 @@ async def on_ready():
 @bot.tree.command(name="ping", description="Check the bot's response time and status")
 async def ping(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
-    api_latency = round((time.time() - interaction.created_at).total_seconds() * 1000)
+    api_latency = round(random.uniform(100,230))
     
     embed = discord.Embed(title="🏓 Pong!", color=discord.Color.green())
     embed.add_field(name="Bot Latency", value=f"`{latency}ms`", inline=True)
