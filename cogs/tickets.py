@@ -723,8 +723,8 @@ class MultiTicketView(View):
                 description=option['open_message'],
                 color=discord.Color.green()
             )
-        welcome_embed.add_field(name="Support Team", value="Our staff will be with you shortly.", inline=False)
-        welcome_embed.set_footer(text="Click the button below to close this ticket")
+            welcome_embed.add_field(name="Support Team", value="Our staff will be with you shortly.", inline=False)
+            welcome_embed.set_footer(text="Click the button below to close this ticket")
         
             await thread.send(interaction.user.mention, embed=welcome_embed, view=CloseTicketView(guild_id))
         
