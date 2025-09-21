@@ -127,6 +127,9 @@ class ConfirmCloseView(View):
                 if not ticket_data:
                     await interaction.response.send_message("❌ Ticket data not found!", ephemeral=True)
                     return
+ 
+                self.ticket_data['closer_name'] = interaction.user
+                self.ticket_data['closed_at'] = datetime.now(timezone.utc).isoformat()
                 
                 # Create transcript
                 await self.create_transcript(interaction.guild, thread, self.reason, ticket_data)
@@ -210,7 +213,7 @@ class ConfirmCloseView(View):
         transcript.append(f"Created by: {ticket_data.get('user_mention', 'Unknown')}")
         transcript.append(f"Created at: {ticket_data.get('created_at', 'Unknown')}")
         transcript.append(f"Closed by: {ticket_data.get('closer_name', 'Unknown')}")
-        transcript.append(f"Closed at: {datetime.now(timezone.utc).isoformat()}")
+        transcript.append(f"Closed at: {ticket_data.get('closed_at', 'Unknown')}")
         transcript.append(f"Reason: {reason}")
         
         # Add staff participation info
