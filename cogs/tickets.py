@@ -149,7 +149,7 @@ class ConfirmCloseView(View):
                 # Remove from active tickets
                 remove_active_ticket(self.guild_id, self.thread_id)
 
-                await interaction.response.sent_message("archiving the ticket...",ephemeral=False)
+                await interaction.response.send_message("archiving the ticket...",ephemeral=False)
                 await thread.edit(archived=True, locked=True)
                 
                 await interaction.followup.send("✅ Ticket closed and archived!", ephemeral=False)
