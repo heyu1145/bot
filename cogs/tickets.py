@@ -653,11 +653,10 @@ class MultiTicketView(View):
         async def callback(interaction: discord.Interaction):
             await self.open_ticket(interaction, option)
         return callback
-
     async def open_ticket(self, interaction: discord.Interaction, option):
         user_id = interaction.user.id
         guild_id = self.guild_id
-        
+    
         if str(interaction.guild.id) != guild_id:
             return await interaction.response.send_message("❌ Invalid server!", ephemeral=True)
 
@@ -667,20 +666,20 @@ class MultiTicketView(View):
         try:
             handle_channel = await interaction.guild.fetch_channel(int(option["handle_channel_id"]))
             title = option["title_format"].replace("{username}", interaction.user.name).replace("{userid}", str(user_id))
-            
+        
             thread = await interaction.channel.create_thread(
                 name=title[:100],
                 type=discord.ChannelType.private_thread,
                 invitable=False
             )
-            
+        
             staff_roles = load_staff_roles(guild_id)
             for role_id in staff_roles:
                 role = interaction.guild.get_role(int(role_id))
                 if role:
                     await thread.set_permissions(role, view_channel=True, send_messages=True)
-
-            # Create a proper embed for the handle message
+                    
+           # Create a proper embed for the handle message
             handle_embed = discord.Embed(
                 title=f"New Ticket: {option['button_label']}",
                 description=f"**Creator:** {interaction.user.mention}\n**Ticket:** {thread.mention}",
@@ -693,8 +692,13 @@ class MultiTicketView(View):
                 inline=False
             )
             handle_embed.set_footer(text=f"User ID: {interaction.user.id} | Ticket ID: {thread.id}")
-            
-            handle_msg = await handle_channel.send(embed=handle_embed, view=JoinTicketView(str(thread.id), guild_id, str(handle_msg.id)))
+        
+            # First create the message
+            handle_msg = await handle_channel.send(embed=handle_embed)
+        
+            # Then create the view with the message ID
+            join_view = JoinTicketView(str(thread.id), guild_id, str(handle_msg.id))
+            await handle_msg.edit(view=join_view)
 
             # Store ticket data with panel and option IDs for transcript functionality
             ticket_data = {
@@ -709,21 +713,21 @@ class MultiTicketView(View):
                 'created_at': datetime.now(timezone.utc).isoformat(),
                 'joined_staff': []  # Initialize empty list for staff who join
             }
-            
+        
             save_active_ticket(guild_id, user_id, str(thread.id), str(handle_msg.id), f"multi_{self.panel_id}_{option['id']}", ticket_data)
             increment_user_ticket_count(guild_id, user_id)
 
-            # Create a proper welcome embed instead of plain text
+        # Create a proper welcome embed instead of plain text
             welcome_embed = discord.Embed(
                 title=f"Welcome to your {option['button_label']} ticket!",
                 description=option['open_message'],
                 color=discord.Color.green()
             )
-            welcome_embed.add_field(name="Support Team", value="Our staff will be with you shortly.", inline=False)
-            welcome_embed.set_footer(text="Click the button below to close this ticket")
-            
+        welcome_embed.add_field(name="Support Team", value="Our staff will be with you shortly.", inline=False)
+        welcome_embed.set_footer(text="Click the button below to close this ticket")
+        
             await thread.send(interaction.user.mention, embed=welcome_embed, view=CloseTicketView(guild_id))
-            
+        
             await interaction.response.send_message(f"✅ Ticket created: {thread.mention}", ephemeral=True)
 
         except Exception as e:
