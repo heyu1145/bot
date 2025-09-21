@@ -173,6 +173,7 @@ def save_active_ticket(guild_id: str, user_id: int, thread_id: str, handle_msg_i
         
         logger.info(f"✅ Saved active ticket - Server: {guild_id}, User: {user_id_str}")
         return True
+        
     except Exception as e:
         logger.error(f"❌ Failed to save active ticket: {str(e)}")
         return False
