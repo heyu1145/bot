@@ -63,22 +63,50 @@ class ConfirmCloseView(View):
         try:
             thread = interaction.guild.get_thread(int(self.thread_id))
             if thread:
+                # Generate transcript
+                await self.generate_transcript(interaction, thread)
+                
                 # Archive the thread
                 await thread.edit(archived=True, locked=True)
                 
                 # Remove from active tickets
                 remove_active_ticket(self.guild_id, self.thread_id)
                 
-                await interaction.response.send_message("✅ Ticket closed and archived!", ephemeral=True)
+                await interaction.response.send_message("✅ Ticket closed, archived, and transcript sent!", ephemeral=True)
             else:
                 await interaction.response.send_message("❌ Ticket not found!", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ Error closing ticket: {str(e)}", ephemeral=True)
 
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
-    async def cancel_close(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.edit_message(content="Ticket closure cancelled.", view=None)
-
+    async def generate_transcript(self, interaction: discord.Interaction, thread: discord.Thread):
+        # Fetch all messages in the thread
+        messages = []
+        async for msg in thread.history(limit=None, oldest_first=True):
+            author = msg.author.name if not msg.author.bot else f"[BOT] {msg.author.name}"
+            messages.append(f"[{msg.created_at.strftime('%Y-%m-%d %H:%M:%S')}] {author}: {msg.content}")
+        
+        # Get ticket config to find transcript channel
+        ticket_data = get_ticket_data(self.guild_id, self.thread_id)
+        if ticket_data and ticket_data.startswith("multi_"):
+            panel_id = ticket_data.split("_")[1]
+            option_id = ticket_data.split("_")[2]
+            multi_config = get_multi_ticket_setup_by_id(self.guild_id, panel_id)
+            if multi_config:
+                for option in multi_config.get("ticket_options", []):
+                    if option.get("id") == option_id and option.get("transcripts_channel_id"):
+                        transcripts_channel = interaction.guild.get_channel(int(option["transcripts_channel_id"]))
+                        if transcripts_channel:
+                            transcript_content = "\n".join(messages)
+                            transcript_embed = discord.Embed(
+                                title=f"Ticket Transcript - {thread.name}",
+                                description=f"**Closed By:** {interaction.user.mention}\n**Reason:** {self.reason}",
+                                color=discord.Color.grey()
+                            )
+                            transcript_embed.add_field(name="Messages", value=transcript_content[:4096], inline=False)
+                            await transcripts_channel.send(embed=transcript_embed)
+                            return
+        # If no transcript channel found
+        await interaction.followup.send("ℹ️ No transcript channel configured, so transcript was not sent.", ephemeral=True)
 # Add the missing CloseTicketView class
 class CloseTicketView(View):
     def __init__(self, guild_id: str):
