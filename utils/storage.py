@@ -121,28 +121,41 @@ def get_ticket_setup_by_id(guild_id: str, setup_id: str) -> Optional[Dict[str, A
     return None
 
 # Active Tickets
-def remove_active_ticket(guild_id: str, identifier: str) -> bool:
-    """
-    Remove active ticket by user_id or thread_id
-    identifier: can be either user_id (str) or thread_id (str)
-    """
+def load_active_tickets(guild_id: str) -> Dict[str, Any]:
+    path = get_server_data_path(guild_id, "active_tickets.json")
     try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        with open(path, 'w') as f:
+            json.dump({}, f)
+        return {}
+
+def update_ticket_data(guild_id: str, thread_id: str, ticket_data: Dict[str, Any]) -> bool:
+    """Update ticket data for a specific thread"""
+    try:
+        # Load all active tickets
         tickets = load_active_tickets(guild_id)
         
-        # Check if identifier is a user_id
-        if identifier in tickets:
-            setup_id = tickets[identifier].get("setup_id", "unknown")
-            del tickets[identifier]
-            with open(get_server_data_path(guild_id, "active_tickets.json"), 'w') as f:
-                json.dump(tickets, f, indent=2)
-            logger.info(f"✅ Removed ticket - Server: {guild_id}, User: {identifier}, Setup: {setup_id}")
-            return True
-        
-        # Search by thread_id
+        # Find the ticket by thread_id
         for user_id, data in tickets.items():
-            if data.get('thread_id') == identifier:
-                setup_id = data.get("setup_id", "unknown")
-                del tickets[user_id]
+            if data.get('thread_id') == thread_id:
+                # Update the ticket data
+                tickets[user_id] = ticket_data
+                
+                # Save the updated tickets
+                with open(get_server_data_path(guild_id, "active_tickets.json"), 'w') as f:
+                    json.dump(tickets, f, indent=2)
+                
+                logger.info(f"✅ Updated ticket data - Server: {guild_id}, Thread: {thread_id}")
+                return True
+        
+        logger.warning(f"⚠️ Ticket not found for update - Server: {guild_id}, Thread: {thread_id}")
+        return False
+        
+    except Exception as e:
+        logger.error(f"❌ Error updating ticket data: {str(e)}")
+        return False
 
 def save_active_ticket(guild_id: str, user_id: int, thread_id: str, handle_msg_id: str, setup_id: str, ticket_data: Optional[Dict[str, Any]] = None) -> bool:
     try:
@@ -173,35 +186,8 @@ def save_active_ticket(guild_id: str, user_id: int, thread_id: str, handle_msg_i
         
         logger.info(f"✅ Saved active ticket - Server: {guild_id}, User: {user_id_str}")
         return True
-        
     except Exception as e:
         logger.error(f"❌ Failed to save active ticket: {str(e)}")
-        return False
-
-def update_ticket_data(guild_id: str, thread_id: str, ticket_data: Dict[str, Any]) -> bool:
-    """Update ticket data for a specific thread"""
-    try:
-        # Load all active tickets
-        tickets = load_active_tickets(guild_id)
-        
-        # Find the ticket by thread_id
-        for user_id, data in tickets.items():
-            if data.get('thread_id') == thread_id:
-                # Update the ticket data
-                tickets[user_id] = ticket_data
-                
-                # Save the updated tickets
-                with open(get_server_data_path(guild_id, "active_tickets.json"), 'w') as f:
-                    json.dump(tickets, f, indent=2)
-                
-                logger.info(f"✅ Updated ticket data - Server: {guild_id}, Thread: {thread_id}")
-                return True
-        
-        logger.warning(f"⚠️ Ticket not found for update - Server: {guild_id}, Thread: {thread_id}")
-        return False
-        
-    except Exception as e:
-        logger.error(f"❌ Error updating ticket data: {str(e)}")
         return False
 
 def get_ticket_data(guild_id: str, identifier: str) -> Optional[Dict[str, Any]]:
@@ -225,20 +211,36 @@ def get_ticket_data(guild_id: str, identifier: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"❌ Error getting ticket data: {str(e)}")
         return None
-        
-def remove_active_ticket(guild_id: str, user_id: int) -> bool:
+
+def remove_active_ticket(guild_id: str, identifier: str) -> bool:
+    """
+    Remove active ticket by user_id or thread_id
+    identifier: can be either user_id (str) or thread_id (str)
+    """
     try:
         tickets = load_active_tickets(guild_id)
-        user_id_str = str(user_id)
-        if user_id_str not in tickets:
-            logger.info(f"ℹ️ Ticket for user {user_id_str} (Server: {guild_id}) already removed")
-            return False
-        setup_id = tickets[user_id_str].get("setup_id", "unknown")
-        del tickets[user_id_str]
-        with open(get_server_data_path(guild_id, "active_tickets.json"), 'w') as f:
-            json.dump(tickets, f, indent=2)
-        logger.info(f"✅ Removed ticket - Server: {guild_id}, User: {user_id_str}, Setup: {setup_id}")
-        return True
+        
+        # Check if identifier is a user_id
+        if identifier in tickets:
+            setup_id = tickets[identifier].get("setup_id", "unknown")
+            del tickets[identifier]
+            with open(get_server_data_path(guild_id, "active_tickets.json"), 'w') as f:
+                json.dump(tickets, f, indent=2)
+            logger.info(f"✅ Removed ticket - Server: {guild_id}, User: {identifier}, Setup: {setup_id}")
+            return True
+        
+        # Search by thread_id
+        for user_id, data in tickets.items():
+            if data.get('thread_id') == identifier:
+                setup_id = data.get("setup_id", "unknown")
+                del tickets[user_id]
+                with open(get_server_data_path(guild_id, "active_tickets.json"), 'w') as f:
+                    json.dump(tickets, f, indent=2)
+                logger.info(f"✅ Removed ticket - Server: {guild_id}, Thread: {identifier}, Setup: {setup_id}")
+                return True
+        
+        logger.info(f"ℹ️ Ticket not found for removal - Server: {guild_id}, Identifier: {identifier}")
+        return False
     except Exception as e:
         logger.error(f"❌ Error removing active ticket: {str(e)}")
         return False
@@ -374,5 +376,5 @@ def import_all_server_data(data: Dict[str, Any]) -> bool:
         
         return True
     except Exception as e:
-        logger.error(f"Error importing all server data: {e}")
+        logger.error(f"Error importing all server data: {e")
         return False
