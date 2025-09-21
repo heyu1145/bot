@@ -7,22 +7,24 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 import asyncio
 import re
+import io
 
 from utils.storage import (
     load_multi_ticket_configs, save_multi_ticket_configs, get_multi_ticket_setup_by_id,
     load_ticket_configs, save_ticket_configs, get_ticket_setup_by_id,
     load_active_tickets, save_active_ticket, get_ticket_data, remove_active_ticket,
     load_staff_roles, increment_user_ticket_count, reset_user_ticket_count,
-    load_user_ticket_counts
+    load_user_ticket_counts, update_ticket_data
 )
 from utils.permissions import is_admin_or_owner, has_event_access
 
-# Add the missing JoinTicketView class
+# JoinTicketView class
 class JoinTicketView(View):
-    def __init__(self, thread_id: str, guild_id: str):
+    def __init__(self, thread_id: str, guild_id: str, handle_msg_id: str):
         super().__init__(timeout=None)
         self.thread_id = thread_id
         self.guild_id = guild_id
+        self.handle_msg_id = handle_msg_id
 
     @discord.ui.button(label="Join Ticket", style=discord.ButtonStyle.primary, emoji="🎫", custom_id="join_ticket")
     async def join_ticket(self, interaction: discord.Interaction, button: Button):
@@ -30,41 +32,105 @@ class JoinTicketView(View):
             thread = interaction.guild.get_thread(int(self.thread_id))
             if thread:
                 await thread.add_user(interaction.user)
+                
+                # Update the handle message to show who joined
+                try:
+                    ticket_data = get_ticket_data(self.guild_id, self.thread_id)
+                    if ticket_data and 'handle_channel_id' in ticket_data:
+                        handle_channel = interaction.guild.get_channel(int(ticket_data['handle_channel_id']))
+                        if handle_channel:
+                            handle_msg = await handle_channel.fetch_message(int(self.handle_msg_id))
+                            
+                            # Get current joined staff list or initialize empty list
+                            joined_staff = ticket_data.get('joined_staff', [])
+                            
+                            # Add current staff if not already in list
+                            staff_info = {
+                                'id': str(interaction.user.id),
+                                'name': interaction.user.display_name,
+                                'joined_at': datetime.now(timezone.utc).isoformat()
+                            }
+                            
+                            if not any(staff['id'] == str(interaction.user.id) for staff in joined_staff):
+                                joined_staff.append(staff_info)
+                                ticket_data['joined_staff'] = joined_staff
+                                update_ticket_data(self.guild_id, self.thread_id, ticket_data)
+                            
+                            # Update the embed with joined staff information
+                            embed = handle_msg.embeds[0] if handle_msg.embeds else discord.Embed()
+                            
+                            # Clear existing fields and rebuild
+                            embed.clear_fields()
+                            
+                            # Add basic info
+                            embed.add_field(
+                                name="Ticket Information",
+                                value=f"**Creator:** {ticket_data.get('user_mention', 'Unknown')}\n**Ticket:** {thread.mention}",
+                                inline=False
+                            )
+                            
+                            # Add joined staff information
+                            if joined_staff:
+                                staff_list = "\n".join([f"• {staff['name']} (<t:{int(datetime.fromisoformat(staff['joined_at']).timestamp())}:R>)" for staff in joined_staff])
+                                embed.add_field(
+                                    name=f"Joined Staff ({len(joined_staff)})",
+                                    value=staff_list,
+                                    inline=False
+                                )
+                            else:
+                                embed.add_field(
+                                    name="Joined Staff (0)",
+                                    value="No staff members have joined yet",
+                                    inline=False
+                                )
+                            
+                            await handle_msg.edit(embed=embed)
+                except Exception as e:
+                    print(f"Error updating handle message: {e}")
+                
                 await interaction.response.send_message(f"✅ Joined ticket: {thread.mention}", ephemeral=True)
             else:
                 await interaction.response.send_message("❌ Ticket not found!", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ Error joining ticket: {str(e)}", ephemeral=True)
 
-# Add the missing CloseReasonModal class
+# CloseReasonModal class
 class CloseReasonModal(Modal, title="🔒 Close Ticket"):
     reason = TextInput(label="Reason for closing", placeholder="Optional reason for closing...", style=discord.TextStyle.paragraph, required=False, max_length=500)
 
-    def __init__(self, guild_id: str, thread_id: str):
+    def __init__(self, guild_id: str, thread_id: str, ticket_data: dict):
         super().__init__()
         self.guild_id = guild_id
         self.thread_id = thread_id
+        self.ticket_data = ticket_data
 
     async def on_submit(self, interaction: discord.Interaction):
         reason = str(self.reason) if self.reason.value else "No reason provided"
-        view = ConfirmCloseView(self.guild_id, self.thread_id, reason)
+        view = ConfirmCloseView(self.guild_id, self.thread_id, reason, self.ticket_data)
         await interaction.response.send_message(f"**Are you sure you want to close this ticket?**\nReason: {reason}", view=view, ephemeral=True)
-        
-# Add the missing ConfirmCloseView class
+
+# ConfirmCloseView class
 class ConfirmCloseView(View):
-    def __init__(self, guild_id: str, thread_id: str, reason: str):
+    def __init__(self, guild_id: str, thread_id: str, reason: str, ticket_data: dict):
         super().__init__(timeout=60)
         self.guild_id = guild_id
         self.thread_id = thread_id
         self.reason = reason
+        self.ticket_data = ticket_data
 
     @discord.ui.button(label="Confirm Close", style=discord.ButtonStyle.danger, emoji="🔒")
     async def confirm_close(self, interaction: discord.Interaction, button: Button):
         try:
             thread = interaction.guild.get_thread(int(self.thread_id))
             if thread:
-                # Generate transcript
-                await self.generate_transcript(interaction, thread)
+                # Get ticket data
+                ticket_data = get_ticket_data(self.guild_id, self.thread_id)
+                if not ticket_data:
+                    await interaction.response.send_message("❌ Ticket data not found!", ephemeral=True)
+                    return
+                
+                # Create transcript
+                await self.create_transcript(interaction.guild, thread, self.reason, ticket_data)
                 
                 # Archive the thread
                 await thread.edit(archived=True, locked=True)
@@ -72,42 +138,115 @@ class ConfirmCloseView(View):
                 # Remove from active tickets
                 remove_active_ticket(self.guild_id, self.thread_id)
                 
-                await interaction.response.send_message("✅ Ticket closed, archived, and transcript sent!", ephemeral=True)
+                await interaction.response.send_message("✅ Ticket closed and archived!", ephemeral=True)
             else:
                 await interaction.response.send_message("❌ Ticket not found!", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ Error closing ticket: {str(e)}", ephemeral=True)
 
-    async def generate_transcript(self, interaction: discord.Interaction, thread: discord.Thread):
-        # Fetch all messages in the thread
-        messages = []
-        async for msg in thread.history(limit=None, oldest_first=True):
-            author = msg.author.name if not msg.author.bot else f"[BOT] {msg.author.name}"
-            messages.append(f"[{msg.created_at.strftime('%Y-%m-%d %H:%M:%S')}] {author}: {msg.content}")
-        
-        # Get ticket config to find transcript channel
-        ticket_data = get_ticket_data(self.guild_id, self.thread_id)
-        if ticket_data and ticket_data.startswith("multi_"):
-            panel_id = ticket_data.split("_")[1]
-            option_id = ticket_data.split("_")[2]
+    async def create_transcript(self, guild: discord.Guild, thread: discord.Thread, reason: str, ticket_data: dict):
+        """Create a transcript of the ticket and send it to the transcripts channel"""
+        try:
+            # Get the ticket config to find transcripts channel
+            panel_id = ticket_data.get('panel_id', '')
+            option_id = ticket_data.get('option_id', '')
+            
+            if not panel_id:
+                return  # No panel ID, can't find transcripts channel
+            
+            # Get the multi-ticket config
             multi_config = get_multi_ticket_setup_by_id(self.guild_id, panel_id)
-            if multi_config:
-                for option in multi_config.get("ticket_options", []):
-                    if option.get("id") == option_id and option.get("transcripts_channel_id"):
-                        transcripts_channel = interaction.guild.get_channel(int(option["transcripts_channel_id"]))
-                        if transcripts_channel:
-                            transcript_content = "\n".join(messages)
-                            transcript_embed = discord.Embed(
-                                title=f"Ticket Transcript - {thread.name}",
-                                description=f"**Closed By:** {interaction.user.mention}\n**Reason:** {self.reason}",
-                                color=discord.Color.grey()
-                            )
-                            transcript_embed.add_field(name="Messages", value=transcript_content[:4096], inline=False)
-                            await transcripts_channel.send(embed=transcript_embed)
-                            return
-        # If no transcript channel found
-        await interaction.followup.send("ℹ️ No transcript channel configured, so transcript was not sent.", ephemeral=True)
-# Add the missing CloseTicketView class
+            if not multi_config:
+                return  # Config not found
+            
+            # Find the specific option to get transcripts channel
+            transcripts_channel_id = None
+            for option in multi_config.get("ticket_options", []):
+                if option.get("id") == option_id:
+                    transcripts_channel_id = option.get("transcripts_channel_id")
+                    break
+            
+            if not transcripts_channel_id:
+                return  # No transcripts channel configured
+            
+            # Get the transcripts channel
+            transcripts_channel = guild.get_channel(int(transcripts_channel_id))
+            if not transcripts_channel:
+                return  # Channel not found
+            
+            # Create transcript content
+            transcript_content = await self.generate_transcript(thread, reason, ticket_data)
+            
+            # Send transcript to transcripts channel
+            transcript_file = discord.File(
+                io.BytesIO(transcript_content.encode('utf-8')),
+                filename=f"transcript-{thread.name}.txt"
+            )
+            
+            # Create a summary of staff participation
+            joined_staff = ticket_data.get('joined_staff', [])
+            staff_summary = "\n".join([f"• {staff['name']}" for staff in joined_staff]) if joined_staff else "No staff joined"
+            
+            embed = discord.Embed(
+                title=f"Transcript: {thread.name}",
+                description=f"Ticket closed by {ticket_data.get('closer_name', 'Unknown')}",
+                color=discord.Color.blue(),
+                timestamp=datetime.now(timezone.utc)
+            )
+            embed.add_field(name="Reason", value=reason, inline=False)
+            embed.add_field(name="Created by", value=ticket_data.get('user_mention', 'Unknown'), inline=True)
+            embed.add_field(name="Created at", value=ticket_data.get('created_at', 'Unknown'), inline=True)
+            embed.add_field(name=f"Staff Joined ({len(joined_staff)})", value=staff_summary, inline=False)
+            
+            await transcripts_channel.send(embed=embed, file=transcript_file)
+            
+        except Exception as e:
+            print(f"Error creating transcript: {e}")
+
+    async def generate_transcript(self, thread: discord.Thread, reason: str, ticket_data: dict) -> str:
+        """Generate a text transcript of the ticket"""
+        transcript = []
+        transcript.append(f"Ticket Transcript: {thread.name}")
+        transcript.append("=" * 50)
+        transcript.append(f"Created by: {ticket_data.get('user_mention', 'Unknown')}")
+        transcript.append(f"Created at: {ticket_data.get('created_at', 'Unknown')}")
+        transcript.append(f"Closed by: {ticket_data.get('closer_name', 'Unknown')}")
+        transcript.append(f"Closed at: {datetime.now(timezone.utc).isoformat()}")
+        transcript.append(f"Reason: {reason}")
+        
+        # Add staff participation info
+        joined_staff = ticket_data.get('joined_staff', [])
+        transcript.append(f"Staff Joined: {len(joined_staff)}")
+        for staff in joined_staff:
+            transcript.append(f"  • {staff['name']} (Joined: {staff.get('joined_at', 'Unknown')})")
+        
+        transcript.append("=" * 50)
+        transcript.append("MESSAGES:")
+        transcript.append("=" * 50)
+        
+        # Fetch all messages in the thread
+        try:
+            async for message in thread.history(limit=None, oldest_first=True):
+                timestamp = message.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                author = message.author.display_name
+                content = message.clean_content
+                
+                # Handle attachments
+                attachments = ""
+                if message.attachments:
+                    attachments = " [Attachments: " + ", ".join(a.url for a in message.attachments) + "]"
+                
+                transcript.append(f"[{timestamp}] {author}: {content}{attachments}")
+        except Exception as e:
+            transcript.append(f"Error fetching messages: {e}")
+        
+        return "\n".join(transcript)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def cancel_close(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.edit_message(content="Ticket closure cancelled.", view=None)
+
+# CloseTicketView class
 class CloseTicketView(View):
     def __init__(self, guild_id: str):
         super().__init__(timeout=None)
@@ -119,9 +258,20 @@ class CloseTicketView(View):
             await interaction.response.send_message("❌ This can only be used in ticket threads!", ephemeral=True)
             return
         
-        modal = CloseReasonModal(self.guild_id, str(interaction.channel.id))
+        # Get ticket data
+        ticket_data = get_ticket_data(self.guild_id, str(interaction.channel.id))
+        if not ticket_data:
+            await interaction.response.send_message("❌ This doesn't appear to be a valid ticket!", ephemeral=True)
+            return
+        
+        # Store who is closing the ticket
+        ticket_data['closer_id'] = str(interaction.user.id)
+        ticket_data['closer_name'] = interaction.user.display_name
+        
+        modal = CloseReasonModal(self.guild_id, str(interaction.channel.id), ticket_data)
         await interaction.response.send_modal(modal)
 
+# TicketTypeModal class
 class TicketTypeModal(Modal, title="🎫 Ticket Panel Setup"):
     panel_title = TextInput(label="Panel Title", placeholder="e.g., Support Center", default="Support Tickets", max_length=100, required=True)
     panel_description = TextInput(label="Panel Description", placeholder="Describe what this panel is for...", default="Click the button below to create a ticket", style=discord.TextStyle.paragraph, max_length=1000, required=True)
@@ -139,6 +289,7 @@ class TicketTypeModal(Modal, title="🎫 Ticket Panel Setup"):
             view = SingleTicketSetupView(self.channel, str(self.panel_title), str(self.panel_description))
             await interaction.response.send_message("🎛️ **Single Ticket Panel Setup**\nConfigure your ticket options:", view=view, ephemeral=True)
 
+# SingleTicketSetupView class
 class SingleTicketSetupView(View):
     def __init__(self, channel: discord.TextChannel, panel_title: str, panel_description: str):
         super().__init__(timeout=300)
@@ -252,6 +403,7 @@ class SingleTicketSetupView(View):
                 view=None
             )
 
+# MultiTicketSetupView class
 class MultiTicketSetupView(View):
     def __init__(self, channel: discord.TextChannel, panel_title: str, panel_description: str):
         super().__init__(timeout=300)
@@ -348,6 +500,7 @@ class MultiTicketSetupView(View):
     async def cancel(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_message("❌ Cancelled panel creation.", ephemeral=True)
 
+# TicketConfigModal class
 class TicketConfigModal(Modal, title="🎫 Configure Ticket Option"):
     button_label = TextInput(label="Button Label", placeholder="e.g., Technical Support", max_length=80, required=True)
     button_emoji = TextInput(label="Button Emoji (optional)", placeholder="e.g., 🛠️", max_length=10, required=False)
@@ -370,6 +523,7 @@ class TicketConfigModal(Modal, title="🎫 Configure Ticket Option"):
             ephemeral=True
         )
 
+# ChannelSelectView class
 class ChannelSelectView(View):
     def __init__(self, config_data: dict, guild: discord.Guild):
         super().__init__(timeout=120)
@@ -416,6 +570,7 @@ class ChannelSelectView(View):
             view=view
         )
 
+# TranscriptSelectView class
 class TranscriptSelectView(View):
     def __init__(self, config_data: dict, guild: discord.Guild):
         super().__init__(timeout=120)
@@ -526,24 +681,56 @@ class MultiTicketView(View):
                 if role:
                     await thread.set_permissions(role, view_channel=True, send_messages=True)
 
+            # Create a proper embed for the handle message
             handle_embed = discord.Embed(
                 title=f"New Ticket: {option['button_label']}",
-                description=f"Creator: {interaction.user.mention}\nTicket: {thread.mention}",
-                color=discord.Color.blue()
+                description=f"**Creator:** {interaction.user.mention}\n**Ticket:** {thread.mention}",
+                color=discord.Color.blue(),
+                timestamp=datetime.now(timezone.utc)
             )
-            handle_msg = await handle_channel.send(embed=handle_embed, view=JoinTicketView(str(thread.id), guild_id))
+            handle_embed.add_field(
+                name="Joined Staff (0)",
+                value="No staff members have joined yet",
+                inline=False
+            )
+            handle_embed.set_footer(text=f"User ID: {interaction.user.id} | Ticket ID: {thread.id}")
+            
+            handle_msg = await handle_channel.send(embed=handle_embed, view=JoinTicketView(str(thread.id), guild_id, str(handle_msg.id)))
 
-            save_active_ticket(guild_id, user_id, str(thread.id), str(handle_msg.id), f"multi_{self.panel_id}_{option['id']}")
+            # Store ticket data with panel and option IDs for transcript functionality
+            ticket_data = {
+                'user_id': str(user_id),
+                'user_name': interaction.user.name,
+                'user_mention': interaction.user.mention,
+                'thread_id': str(thread.id),
+                'handle_msg_id': str(handle_msg.id),
+                'handle_channel_id': str(handle_channel.id),
+                'panel_id': self.panel_id,
+                'option_id': option['id'],
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'joined_staff': []  # Initialize empty list for staff who join
+            }
+            
+            save_active_ticket(guild_id, user_id, str(thread.id), str(handle_msg.id), f"multi_{self.panel_id}_{option['id']}", ticket_data)
             increment_user_ticket_count(guild_id, user_id)
 
-            welcome_msg = f"Hello {interaction.user.mention}! 👋\n\n**{option['button_label']}**\n{option['open_message']}"
-            await thread.send(welcome_msg, view=CloseTicketView(guild_id))
+            # Create a proper welcome embed instead of plain text
+            welcome_embed = discord.Embed(
+                title=f"Welcome to your {option['button_label']} ticket!",
+                description=option['open_message'],
+                color=discord.Color.green()
+            )
+            welcome_embed.add_field(name="Support Team", value="Our staff will be with you shortly.", inline=False)
+            welcome_embed.set_footer(text="Click the button below to close this ticket")
+            
+            await thread.send(interaction.user.mention, embed=welcome_embed, view=CloseTicketView(guild_id))
             
             await interaction.response.send_message(f"✅ Ticket created: {thread.mention}", ephemeral=True)
 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error: {str(e)}", ephemeral=True)
 
+# Tickets Cog
 class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
