@@ -141,7 +141,7 @@ class ConfirmCloseView(View):
                                 if handle_msg.author.id == interaction.client.user.id:
                                     await handle_msg.delete()
                 except Exception as e:
-                    print(f"Error when deleting message {handle_msg}, {str(e)}")
+                    print(f"Error when deleting message: {str(e)}")
                 
                 # Create transcript
                 await self.create_transcript(interaction.guild, thread, self.reason, ticket_data)
@@ -149,15 +149,14 @@ class ConfirmCloseView(View):
                 # Remove from active tickets
                 remove_active_ticket(self.guild_id, self.thread_id)
 
-                await interaction.response.send_message("archiving the ticket...",ephemeral=False)
                 await thread.edit(archived=True, locked=True)
                 
                 await interaction.followup.send("✅ Ticket closed and archived!", ephemeral=False)
             else:
-                await interaction.followup.send("❌ Ticket not found!", ephemeral=False)
+                await interaction.followup.send("❌ Ticket not found!", ephemeral=True)
         except Exception as e:
-            await interaction.followup.send(f"❌ Error closing ticket: {str(e)}", ephemeral=False)
-
+            await interaction.followup.send(f"❌ Error closing ticket: {str(e)}", ephemeral=True)
+            
     async def create_transcript(self, guild: discord.Guild, thread: discord.Thread, reason: str, ticket_data: dict):
         """Create a transcript of the ticket and send it to the transcripts channel"""
         try:
