@@ -136,7 +136,7 @@ class ConfirmCloseView(View):
                     if 'handle_channel_id' in ticket_data and 'handle_msg_id' in ticket_data:
                         handle_channel = interaction.guild.get_channel(int(ticket_data['handle_channel_id']))
                         if handle_channel:
-                            handle_msg = await handle_channel.fetch_massage(int(ticket_data['handle_msg_id']))
+                            handle_msg = await handle_channel.fetch_message(int(ticket_data['handle_msg_id']))
                             if handle_msg:
                                 if handle_msg.author.id == interaction.client.user.id:
                                     await handle_msg.delete()
@@ -149,8 +149,8 @@ class ConfirmCloseView(View):
                 # Remove from active tickets
                 remove_active_ticket(self.guild_id, self.thread_id)
 
-                interaction.response.sent_message("archiving the ticket...",ephemeral=False)
-                                await thread.edit(archived=True, locked=True)
+                await interaction.response.sent_message("archiving the ticket...",ephemeral=False)
+                await thread.edit(archived=True, locked=True)
                 
                 await interaction.followup.send("✅ Ticket closed and archived!", ephemeral=False)
             else:
