@@ -128,7 +128,7 @@ class ConfirmCloseView(View):
                     await interaction.response.send_message("❌ Ticket data not found!", ephemeral=True)
                     return
  
-                self.ticket_data['closer_name'] = interaction.user
+                self.ticket_data['closer_name'] = interaction.user.display_name
                 self.ticket_data['closed_at'] = datetime.now(timezone.utc).isoformat()
                 
                 # Create transcript
@@ -268,7 +268,6 @@ class CloseTicketView(View):
         
         # Store who is closing the ticket
         ticket_data['closer_id'] = str(interaction.user.id)
-        ticket_data['closer_name'] = interaction.user.display_name
         
         modal = CloseReasonModal(self.guild_id, str(interaction.channel.id), ticket_data)
         await interaction.response.send_modal(modal)
