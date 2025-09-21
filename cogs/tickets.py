@@ -134,7 +134,7 @@ class ConfirmCloseView(View):
 
                 try:
                     if 'handle_channel_id' in ticket_data and 'handle_msg_id' in ticket_data:
-                        handle_channel = guild.get_channel(int(ticket_data['handle_channel_id']))
+                        handle_channel = interaction.guild.get_channel(int(ticket_data['handle_channel_id']))
                         if handle_channel:
                             handle_msg = await handle_channel.fetch_massage(int(ticket_data['handle_msg_id']))
                             if handle_msg:
@@ -149,14 +149,14 @@ class ConfirmCloseView(View):
                 # Remove from active tickets
                 remove_active_ticket(self.guild_id, self.thread_id)
 
-                interaction.response.sent_message("archiving the ticket...")
+                interaction.response.sent_message("archiving the ticket...",ephemeral=False)
                                 await thread.edit(archived=True, locked=True)
                 
-                await interaction.response.send_message("✅ Ticket closed and archived!", ephemeral=True)
+                await interaction.followup.send("✅ Ticket closed and archived!", ephemeral=False)
             else:
-                await interaction.response.send_message("❌ Ticket not found!", ephemeral=True)
+                await interaction.followup.send("❌ Ticket not found!", ephemeral=False)
         except Exception as e:
-            await interaction.response.send_message(f"❌ Error closing ticket: {str(e)}", ephemeral=True)
+            await interaction.followup.send(f"❌ Error closing ticket: {str(e)}", ephemeral=False)
 
     async def create_transcript(self, guild: discord.Guild, thread: discord.Thread, reason: str, ticket_data: dict):
         """Create a transcript of the ticket and send it to the transcripts channel"""
