@@ -131,17 +131,28 @@ class ConfirmCloseView(View):
                 self.ticket_data['closer_name'] = interaction.user.display_name
                 self.ticket_data['closer_id'] = str(interaction.user.id)
                 self.ticket_data['closed_at'] = datetime.now(timezone.utc).isoformat()
+
+                try:
+                    if 'handle_channel_id' in ticket_data and 'handle_msg_id' in ticket_data:
+                        handle_channel = gulid.get_channel(int(ticket_data['handle_channel_id']))
+                        if handle_channel:
+                            handle_msg = await handle_channel.fetch_massage(int(ticket_data['handle_msg_id']))
+                            if handle_msg:
+                                if handle_msg.author.id == bot.user.id:
+                                    await handle_msg.delete()
+                except Exception as e:
+                    interaction.response.sent_message(f"Error whwn delete the message, {e}")
+                    logger.warning(f"Error when deleting message {handle_msg}, {e}")
                 
                 # Create transcript
                 await self.create_transcript(interaction.guild, thread, self.reason, ticket_data)
-                
-                # Archive the thread
-                await thread.edit(archived=True, locked=True)
                 
                 # Remove from active tickets
                 remove_active_ticket(self.guild_id, self.thread_id)
                 
                 await interaction.response.send_message("✅ Ticket closed and archived!", ephemeral=True)
+                # Archive the thread
+                await thread.edit(archived=True, locked=True)
             else:
                 await interaction.response.send_message("❌ Ticket not found!", ephemeral=True)
         except Exception as e:
