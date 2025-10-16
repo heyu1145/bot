@@ -1,3 +1,4 @@
+# TIP:This tree isonly for test!
 # Discord Ticket & Events Bot
 
 A feature-rich Discord bot for handling support tickets, event management, and server administration with a modern slash command interface.
