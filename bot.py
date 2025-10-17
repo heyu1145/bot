@@ -25,7 +25,7 @@ if not TOKEN:
 
 if not OWNER_USER_ID:
     logger.error("❌ ERROR: No owner user ID found! Set OWNER_USER_ID in environment variables")
-    exit(1)
+    raise OwnerUseridNoFoundError("Didnt found in environment!")
 
 # Bot setup - KEPT AS IS
 intents = discord.Intents.default()
