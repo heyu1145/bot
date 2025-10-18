@@ -15,3 +15,4 @@ class OwnerUseridException(BotException):
 
 class OwnerUseridNoFoundError(OwnerUseridException):
     pass
+

@@ -1,138 +1,107 @@
-# Discord Ticket & Events Bot
+___This branch is online version. If you want to offline build or test, please visit [offline branch](https://github.com/heyu1145/bot/tree/offline)___
 
-A feature-rich Discord bot for handling support tickets, event management, and server administration with a modern slash command interface.
+# 🤖 Discord Bot
+
+A feature-rich Discord Bot built with Python.
 
 ## 🚀 Features
 
-### 🎫 Ticket System
-- **Multi-Ticket Panels**: Create panels with multiple ticket options
-- **Single Ticket Setup**: Simple one-button ticket creation
-- **Auto Thread Creation**: Private threads for each ticket
-- **Staff Management**: Role-based access control
-- **Transcripts**: Automatic conversation logging
-- **User Limits**: Prevent ticket spam with user limits
+- **Web Preview** - Flask web dashboard for quick status monitoring
+- **Custom Errors** - Custom error handling for easier debugging
+- **Admin and Trusted Users** - Simple permission system for data access
+- **Ticket System** - Feature-rich ticket system for administration
 
-### 📅 Event Management
-- **Smart Time Parsing**: Supports multiple time formats:
-  - `YYYY-MM-DD HH:MM` (2024-12-25 14:30)
-  - `MM-DD HH:MM` (12-25 14:30) 
-  - `HH:MM` (14:30) - auto-detects today/tomorrow
-- **Timezone Support**: User-specific timezone configuration
-- **Voice/Text Events**: Support for both voice channel and external events
-- **Event Modifications**: Change event times easily
+## 🏗️ Project Structure
 
-### 🔐 Permission System
-- **Trusted Users**: Bot owner can designate trusted users
-- **Role-Based Access**: Staff roles for ticket and event management
-- **Admin Protection**: Commands hidden from unauthorized users
-
-### 📊 Data Management
-- **JSON Export/Import**: Backup and restore server data
-- **Server Isolation**: Data separated per server
-- **Statistics**: View server data metrics
-
-## 🛠️ Setup
-
-### Prerequisites
-- Python 3.8 or higher
-- Discord Bot Token
-- Discord Server with appropriate permissions
-
-### Step 1: Create a Discord Bot
-
-1. **Go to Discord Developer Portal**
-   - Visit https://discord.com/developers/applications
-   - Click "New Application" and give it a name
-
-2. **Create Bot User**
-   - Go to the "Bot" section in your application
-   - Click "Add Bot" and confirm
-
-3. **Get Bot Token**
-   - Under the "Token" section, click "Copy" to get your bot token
-   - This is your `TOKEN`
-   - ⚠️ **Never share this token with anyone!**
-
-4. **Enable Privileged Intents**
-   - Enable both "PRESENCE INTENT" and "SERVER MEMBERS INTENT"
-   - Enable "MESSAGE CONTENT INTENT"
-
-### Step 2: Get Your User ID
-
-1. **Enable Developer Mode in Discord**
-   - Open Discord Settings → Advanced → Enable Developer Mode
-
-2. **Find Your User ID**
-   - Right-click on your username → "Copy User ID"
-   - This is your `OWNER_USER_ID`
-
-### Step 3: Environment File Setup
-
-Create a `.env` file in the root directory with the following content:
-
-```env
-# Required: Your bot token from Discord Developer Portal
-TOKEN=your_discord_bot_token_here
-
-# Required: Your Discord User ID (enable developer mode to get this)
-OWNER_USER_ID=your_discord_user_id_here
+```
+bot/
+├── app.py              # Flask web dashboard
+├── bot.py              # Discord bot core
+├── cogs/               # Bot command modules
+│   ├── admin.py        # Admin commands
+│   ├── tickets.py      # Ticket system
+│   ├── events.py       # Event handlers
+│   ├── data_management.py # Data handling
+│   ├── debug.py        # Debug utilities
+│   └── helper.py       # Utility commands
+├── utils/              # Utility modules
+│   ├── storage.py      # Data management
+│   ├── permissions.py  # Access control
+│   └── helper.py       # Common utilities
+├── config/             # Configuration files
+└── customerror.py      # Custom exceptions
 ```
 
-## ❌ Errors
+## 📋 Requirements
 
-### The helper to handle errors
+- **Python 3.10+**
+- **Discord.py**
+- **Flask**
+- **Poetry**
 
-1. **No Discord token found!**
-   - Check your .env file added TOKEN value
-   - Check you copied current Discord bot token
-     
-2. **No Owner ID found!**
-   - Check your .env file added OWNER_USER_ID value
-   - Check you copied current Discord user ID
-     
-3. **Failed to load cogs!**
-   - restart bot to try again
-   - Check you added all file in github if didnt work
+## ⚙️ Installation
 
-## 🚩 Upgrade bot
+### Prerequisites
+- A cloud platform (Replit, Heroku, etc.)
+- Your bot token and user ID
 
-### The tips when Github file update
+### How to Get Your Bot Token and User ID
 
-1. **Save you server datas by /export_data to import later**
-2. **ReDeploy your bot to update file**
-3. **Load your data by /import_data so that your data wont lost**
+**Bot Token:**
+1. Visit [Discord Developer Portal](https://discord.com/developers/applications)
+2. Click "New Application" or select an existing one
+3. Go to "Bot" → "Token"
+4. Click "Reset Token" and copy your new token
+5. **⚠️ Never share your token with anyone!**
 
-## 🏢 Project edits
+**User ID:**
+1. Open Discord
+2. Right-click your profile → "Copy User ID"
 
-You can editing to add/delete commands by recommend ways
+### Setup Steps
 
-## Codes you can edit or delete
-**Codes in cogs without data_management**
+1. **Environment Variables:**
+```bash
+TOKEN=your_bot_token_here
+OWNER_USER_ID=your_user_id_here
+```
 
-## Code add example
-```Python
-import discord
-from discord import app_commands
-from discord.ext import commands
-import logging
+2. **Install Dependencies:**
+```bash
+poetry install
+```
 
-logger=logging.getLogger('discord')
+3. **Start the Bot:**
+```bash
+python3 app.py
+```
+**Note:** Start `app.py` (not `bot.py`) for web preview functionality.
 
-class Example(command.Cog):
-   def __init__(self, bot):
-      self.bot = bot
+## 🔧 Self Development
 
-   def ExampleFunction(UserInput):
-      logger.info(f"Output: User Inputed: {UserInput}")
+### Option 1: Develop Yourself
+- **Compile commands by yourself**
+- **Benefits:** High customization
+- **Requirements:** Advanced programming skills
 
-@app_commands.command(name="ExampleCommand",description="Example Command for test")
-@app_commands.describe(
-   Input="Input anything and see it in logs"
-)
-async def CommandFunction(self, intersection: discord.intersection, Input: str)
-    ExampleFunction(Input)
-    return await intersection.response.sentmessage(f"Sent Successfully! UserInput: {Input}")
+### Option 2: Get Help
+- **Discuss with me in [Issues](https://github.com/heyu1145/bot/issues)**
+- **Benefits:** Lower programming requirements
+- **Limitations:** Less customization
 
-async def setup(bot)
-    await bot.add_cog(Example(bot))
- ```
+## 👥 Authors
+
+- **heyu1145** - *Initial work* - [GitHub](https://github.com/heyu1145)
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 💬 Support
+
+- **GitHub:** [Issues Page](https://github.com/heyu1145/bot/issues)
+- **Email:** [heyu12366@outlook.com](mailto:heyu12366@outlook.com)
+
+---
+
+**⭐ Please star this repo if you find it helpful!**
