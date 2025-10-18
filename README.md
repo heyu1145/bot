@@ -1,4 +1,5 @@
-___This branch is online version. If you want to offline build or test, please visit [offline branch](https://github.com/heyu1145/bot/tree/offline)___
+___🌐 ONLINE/PRODUCTION BRANCH - Optimized for cloud deployment___  
+___For local development and testing, visit the [offline branch](https://github.com/heyu1145/bot/tree/offline)___
 
 # 🤖 Discord Bot
 
