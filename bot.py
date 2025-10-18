@@ -7,6 +7,7 @@ import random
 import time
 from utils.storage import load_trusted_users, is_bot_owner
 from utils.permissions import has_data_access
+from customerror import *
 
 # Setup logging - KEPT AS IS
 logging.basicConfig(level=logging.INFO)
@@ -20,11 +21,11 @@ OWNER_USER_ID = os.getenv('OWNER_USER_ID')
 
 if not TOKEN:
     logger.error("❌ ERROR: No Discord token found! Set TOKEN in environment variables")
-    exit(1)
+    raise TokenNoFoundError("Didnt found token in environment!")
 
 if not OWNER_USER_ID:
     logger.error("❌ ERROR: No owner user ID found! Set OWNER_USER_ID in environment variables")
-    exit(1)
+    raise OwnerUseridNoFoundError("Didnt found in environment!")
 
 # Bot setup - KEPT AS IS
 intents = discord.Intents.default()
