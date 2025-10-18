@@ -1,4 +1,5 @@
-___This branch is online version. If you want to offline build or test, please visit [offline branch](https://github.com/heyu1145/bot/tree/offline)___
+___🧪 OFFLINE/TESTING BRANCH - For local development and testing___  
+___For cloud deployment, visit the [online branch](https://github.com/heyu1145/bot/tree/online)___
 
 # 🤖 Discord Bot
 
@@ -6,10 +7,10 @@ A feature-rich Discord Bot built with Python.
 
 ## 🚀 Features
 
-- **Web Preview** - Flask web dashboard for quick status monitoring
+- **Web Preview** - Flask web dashboard for real-time status monitoring
 - **Custom Errors** - Custom error handling for easier debugging
-- **Admin and Trusted Users** - Simple permission system for data access
-- **Ticket System** - Feature-rich ticket system for administration
+- **Admin & Trusted Users** - Simple permission system for data access
+- **Ticket System** - Complete ticket system for user support
 
 ## 🏗️ Project Structure
 
@@ -37,57 +38,70 @@ bot/
 - **Python 3.10+**
 - **Discord.py**
 - **Flask**
-- **Poetry**
+- **Poetry** (optional - for virtual environment)
 
 ## ⚙️ Installation
 
 ### Prerequisites
-- A cloud platform (Replit, Heroku, etc.)
-- Your bot token and user ID
+- Your Discord bot token
+- Your Discord user ID
 
-### How to Get Your Bot Token and User ID
+### How to Get Your Credentials
 
 **Bot Token:**
 1. Visit [Discord Developer Portal](https://discord.com/developers/applications)
-2. Click "New Application" or select an existing one
-3. Go to "Bot" → "Token"
-4. Click "Reset Token" and copy your new token
+2. Create new application or select existing one
+3. Go to **Bot** → **Token**
+4. Click **Reset Token** and copy your token
 5. **⚠️ Never share your token with anyone!**
 
 **User ID:**
 1. Open Discord
-2. Right-click your profile → "Copy User ID"
+2. Right-click your profile → **Copy User ID**
 
-### Setup Steps
+### Installation Methods
 
-1. **Environment Variables:**
+#### Option A: Using Poetry (Recommended)
 ```bash
-TOKEN=your_bot_token_here
-OWNER_USER_ID=your_user_id_here
-```
+# Install Poetry if not available
+pip install poetry
 
-2. **Install Dependencies:**
-```bash
+# Create virtual environment and install dependencies
 poetry install
+
+# Activate virtual environment
+poetry shell
+
+# Or manually activate
+source $(poetry env info --path)/bin/activate
 ```
 
-3. **Start the Bot:**
+#### Option B: Using requirement.txt
+```bash
+# Install dependencies directly
+pip install -r requirement.txt
+
+# Or using pipx
+pipx install -r requirement.txt
+```
+
+### Running the Bot
 ```bash
 python3 app.py
 ```
-**Note:** Start `app.py` (not `bot.py`) for web preview functionality.
+**Note:** Run `app.py` (not `bot.py`) for full web preview functionality.
 
-## 🔧 Self Development
+## 🔧 Development
 
-### Option 1: Develop Yourself
-- **Compile commands by yourself**
-- **Benefits:** High customization
+### Option 1: Self Development
+- **Write custom commands yourself**
+- **Benefits:** Maximum customization
 - **Requirements:** Advanced programming skills
 
-### Option 2: Get Help
-- **Discuss with me in [Issues](https://github.com/heyu1145/bot/issues)**
-- **Benefits:** Lower programming requirements
-- **Limitations:** Less customization
+### Option 2: Get Assistance
+- **Open an [issue](https://github.com/heyu1145/bot/issues) for help**
+- **Benefits:** Lower programming barrier
+- **Limitations:** Less customization control
 
 ## 👥 Authors
 
@@ -104,4 +118,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**⭐ Please star this repo if you find it helpful!**
+**⭐ If this project helps you, please give it a star!**

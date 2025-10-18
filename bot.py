@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import os
+from dotenv import load_dotenv as lde
 import logging
 import asyncio
 import random
@@ -16,6 +17,8 @@ logger.setLevel(logging.INFO)
 logger.propagate = True
 
 # Load environment variables - KEPT AS IS
+if not lde():
+  logger.warning(".env file no found! trying get environment")
 TOKEN = os.getenv('TOKEN')
 OWNER_USER_ID = os.getenv('OWNER_USER_ID')
 
