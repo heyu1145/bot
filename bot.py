@@ -9,6 +9,7 @@ import time
 from utils.storage import load_trusted_users, is_bot_owner
 from utils.permissions import has_data_access
 from customerror import *
+from utils.ref import create_refresh_task
 
 # Setup logging - KEPT AS IS
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +41,7 @@ intents.messages = True
 
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 bot.start_time = time.time()
+refresh_task = create_refresh_task(bot)
 
 # Uptime function - ADDED
 def get_uptime():
@@ -64,6 +66,7 @@ async def load_cogs():
         await bot.load_extension('cogs.admin')
         await bot.load_extension('cogs.helper')
         await bot.load_extension('cogs.debug')
+        await bot.load_extension('cogs.test')
         logger.info("✅ All cogs loaded successfully")
     except Exception as e:
         logger.error(f"❌ Failed to load cogs: {e}")
@@ -80,6 +83,10 @@ async def on_ready():
         logger.info(f"✅ Synced {len(synced)} slash command(s)")
     except Exception as e:
         logger.error(f"❌ Command sync failed: {e}")
+
+    if not refresh_task.is_running():
+        refresh_task.start()
+        logger.info("refresh task started!")
 
     # Set bot status - ADDED
     await bot.change_presence(
