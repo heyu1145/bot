@@ -1,5 +1,6 @@
 ___🧪 FEATURE OFFLINE/TESTING BRANCH - For local development and testing, with beta feature___
 - **Use [offline branch](https://github.com/heyu1145/bot.git/tree/offline) for better stability**
+
 ___For cloud deployment, visit the [online branch](https://github.com/heyu1145/bot/tree/online)___
 
 # 🤖 Discord Bot
