@@ -1,0 +1,8 @@
+{
+    "prefix": "!",
+    "permission": {
+        "manage_event": true,
+        "messages": true,
+        "members": true
+    }
+}

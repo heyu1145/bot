@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.1.0] - 2025-11-23
+## [2.0.0-rc.1] - 2025.??.??
+
+## [1.1.0] - 2025-10-08
 
 ### Added
 - Auto-Cog Loading System: Implemented an abstract layer for automatic discovery and loading of cogs
@@ -25,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Standardized error handling during cog loading operations
 - Improved error messages for better debugging
 
-## [1.0.0] - 2025-11-22
+## [1.0.0] - 2025-9-17
 
 ### Added
 - Initial release of Discord Bot with comprehensive server management features
