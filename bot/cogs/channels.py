@@ -58,6 +58,7 @@ class ChannelCog(commands.Cog):
 
         embed.set_footer(text=f"Request by {interaction.user.name}")
 
+
         match channel:
             case discord.TextChannel(nsfw=nsfw, 
                                      slowmode_delay=slowmode, 
@@ -79,6 +80,11 @@ class ChannelCog(commands.Cog):
                         value=topic,
                         inline=True
                          )
+                embed.add_field(
+                        name="channel member count",
+                        value=len(channel.members),
+                        inline=True
+                        )
 
             case discord.VoiceChannel(
                     nsfw=nsfw, 
@@ -106,7 +112,7 @@ class ChannelCog(commands.Cog):
 
                 embed.add_field(
                         name='user count',
-                        value=f"count: {len(channel.members)}, limit: {limit}'m",
+                        value=f"{len(channel.members)}/{limit if limit else 'inf'}",
                         inline=True
                         )
 
@@ -150,7 +156,7 @@ class ChannelCog(commands.Cog):
 
                 embed.add_field(
                         name='user',
-                        value=f"count: {len(channel.members)}, limit: {limit},",
+                        value=f"{len(channel.members)}/{limit if limit else 'inf'}",
                         inline=True
                         )
 

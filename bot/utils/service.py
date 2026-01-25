@@ -1,14 +1,14 @@
 """
 run a http service at localhost:4100/api for frontend localhost:3000
 """
-from datetime import datetime
+from datetime import datetime, timezone
+from random import randint
+from time import sleep
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
-from random import randint
 import psutil
-from time import sleep, time
 
 app = FastAPI()
 app.add_middleware(
@@ -32,7 +32,7 @@ class MessageResponse(BaseModel):
 async def response_ping():
     return {
         "reply": "pong!",
-        "timestamp": time()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 
@@ -95,7 +95,7 @@ async def teapot(request: Request):
     resp: dict[str, object] = {
         "status": 418,
         "message": "I'm a teapot",
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "client": {
             "host": request.client.host,
             "user_agent": agent
@@ -114,7 +114,7 @@ async def teapot(request: Request):
         "typescript": "just javascript plus",
         "rust": "memory safety!",
         "lua": "everything is a table, even list or dict",
-        "go": "do you want err != nil?",
+        "go": "did you err != nil today?",
         "html": '<div id="meme">hello world!</div>',
         "css": 'div#meme {\nbackground-color: rgb(255,136,0);\n}'
     }

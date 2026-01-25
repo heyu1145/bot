@@ -1,12 +1,11 @@
 """
 event manage command handler
 """
-from typing import Literal
+from datetime import timedelta
 import discord
 from discord.enums import EntityType, PrivacyLevel
 from discord.ext import commands
 from discord import app_commands
-from datetime import timedelta
 
 
 class EventsCog(commands.Cog):

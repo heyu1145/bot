@@ -14,14 +14,21 @@ default_dir: str = Path(__file__).parent.name
 
 
 class CogsFinder:
-    def __init__(self, bot: commands.Bot, cogs_dir: str = default_dir) -> None:
+    def __init__(self, bot: commands.Bot, cogs_dir: str | Path = default_dir) -> None:
         self.bot = bot
-        self.cogs_dir = cogs_dir
+        self.cogs_dir = Path(cogs_dir)
 
     async def load_cogs(self) -> tuple[int, int]:
+        """
+        load all cogs in cogs_dir
+
+        Returns:
+            successcount and failed count
+        """
+        logger.debug("start loading in %s", self.cogs_dir)
         successcount = 0
         failcount = 0
-        for file in Path(self.cogs_dir).iterdir():
+        for file in self.cogs_dir.iterdir():
             if file.name == this_file:
                 continue
             if file.name.endswith(".py") and not file.name.startswith("_"):
@@ -34,8 +41,51 @@ class CogsFinder:
                                      file.name, str(e))
                     failcount += 1
         logger.info(
-            "Finished loading cogs. Success: %i, Failures: %i", successcount, failcount)
+            "Finished loading cogs. Success: %i, Failures: %i", 
+            successcount, failcount)
         return successcount, failcount
+
+    async def reload_cog(self, name: str | Path) -> bool:
+        """
+        reload the cog specific by cogs name or Path
+        Returns:
+            Successful or not
+        """
+        cog_path = self.cogs_dir / name
+        if (not cog_path.exists()
+            or not cog_path.name.endswith('.py')
+            or cog_path.name.startswith('_')
+            ): return False
+
+        try:
+            await self.bot.reload_extension(f"{self.cogs_dir}.{cog_path.stem}")
+            return True
+        except Exception as e:
+            logger.exception("Failed to load cog %s: %s", name, e)
+            return False
+
+    async def reload_cogs(self) -> tuple[int, int]:
+        """
+        reload all cogs
+
+        Returns:
+            successcount and Failed count
+        """
+        logger.debug("start reload for %s", self.cogs_dir)
+        successcount = 0
+        failcount = 0
+        for file in self.cogs_dir.iterdir():
+            if file.name == this_file:
+                continue
+            if await self.reload_cog(file):
+                successcount += 1
+            else:
+                failcount += 1
+
+        return successcount, failcount
+
+
+
 
     def listCogs(self) -> list[str]:
         return list(self.bot.cogs.keys())

@@ -2,17 +2,20 @@
 Main pointer
 """
 import asyncio
+import logging
+import sys
 import subprocess
+from pathlib import Path
 from aiohttp.client_exceptions import ConnectionTimeoutError
 import discord
-import sys
-from pathlib import Path
 from discord.ext import commands
 from cogs.cogs_finder import CogsFinder
 from config.config_loader import ConfigLoader
 from utils.logger import get_logger
 
-logger = get_logger(__name__)
+logger: logging.Logger = get_logger(__name__)
+
+cogs: list[str] = []
 
 # use subprocess to run backend_file
 
@@ -48,7 +51,7 @@ async def run_service() -> None:
 config_loader: ConfigLoader = ConfigLoader()
 token: str = config_loader.load_token()
 
-config = config_loader.load_config()
+config: dict = config_loader.load_config()
 
 # bot setup
 intents: discord.Intents = discord.Intents.default()
@@ -63,6 +66,8 @@ bot: commands.Bot = commands.Bot(
 # default commands: ping, help, listCogs
 @bot.tree.command(name="ping", description="Check bot latency")
 async def ping(interaction: discord.Interaction):
+    logger.debug('%s runned the ping command', interaction.user.display_name)
+
     await interaction.response.defer(ephemeral=True)
     embed = discord.Embed(
         title="Pong!",
@@ -79,12 +84,9 @@ async def help_command(interaction: discord.Interaction):
         description="This is a help message.",
         color=discord.Color.blue()
     )
-    embed.add_field(name="/ping", value="Check bot latency", inline=False)
-    embed.add_field(name="/help", value="Show this help message", inline=False)
-    embed.add_field(name="/listcogs",
-                    value="List all loaded cogs", inline=False)
-    for cog in cogs:
-        embed.add_field(name=f"Cog: {cog}", value="Loaded cog", inline=False)
+    for cog in bot.tree.walk_commands():
+        embed.add_field(name=cog.name,
+                        value=cog.description, inline=False)
 
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -103,7 +105,7 @@ async def list_cogs(interaction: discord.Interaction):
 @bot.event
 async def on_ready() -> None:
 
-    assert bot.user is not None, "how is did?!"
+    assert bot.user is not None, "how it did?!"
 
     logger.info(
         "logged in as %s (id: %s)",
@@ -131,6 +133,7 @@ async def main():
 
     # run bot
     await bot.start(token)
+
 if __name__ == "__main__":
     try:
         asyncio.run(main())
@@ -138,3 +141,5 @@ if __name__ == "__main__":
         logger.info("KeyboardInterrupt handled! exiting...")
     except ConnectionTimeoutError:
         logger.warning("Connection Error! try check your connection")
+else:
+    logger.warning("you should not run it by module!")
