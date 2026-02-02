@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "bot-dependency-package"
+version = "2.0.0-rc.1"
+description = ""
+authors = ["heyu1145 <heyu12366@outlook.com>"]
+packages = [
+    {include = "*.py"},
+    {include = "front"},
+    {include = "bot"},
+    {include = "docs/"}
+]
+readme = "README.md"
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.12.0"
+discord-py = "^2.6.2"
+fastapi = "^0.125.0"
+python-dotenv = "^1.1.0"
+psutil = "^5.9.0"
+rapidfuzz = "^3.0.0"
+httpx = "^0.28.0"
+uvicorn = "^0.34.0"
+
+[tool.poetry.group.dev.dependencies]
+pylint = "^4.0.0"
+pyright = "^1.0.0"
+pycodestyle = "^2.14.0"
+autopep8 = "^2.3.2"
+pytest = "^9.0.2"
+pytest-asyncio = "^1.3.0"
+pytest-cov = "^7.0.0"

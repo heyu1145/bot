@@ -4,7 +4,7 @@ extra cogs for embed helper
 import discord
 from discord.ext import commands
 from discord import app_commands
-from utils.hex_helper import hex_to_int
+from utils.hex_helper import to_color_int
 
 
 class EmbedsCog(commands.Cog):
@@ -38,7 +38,7 @@ class EmbedsCog(commands.Cog):
         embed: discord.Embed = discord.Embed(
             title=title,
             description=message,
-            color=hex_to_int(color)
+            color=to_color_int(color)
         )
         embed.set_author(name=author if author else '')
         embed.set_footer(text=footer)
@@ -85,7 +85,7 @@ class EmbedsCog(commands.Cog):
         embed: discord.Embed = discord.Embed(
             title=title,
             description=message,
-            color=hex_to_int(color)
+            color=to_color_int(color)
         )
         embed.set_author(name=author if author else '')
         embed.set_footer(

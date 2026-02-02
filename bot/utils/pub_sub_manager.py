@@ -2,6 +2,7 @@
 publish and subscribe system manager
 """
 from collections.abc import Callable
+from typing import Protocol
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -24,99 +25,118 @@ class Event[T, A]:
         """
         return self.action_type
 
-class Channel[T, A]:
+
+class BasicChannel[T, A]:
+    """
+    the basic channel with message system
+    complete the health manage by yourself
+    """
+
     def __init__(self) -> None:
-        self.subs: list[Callable[[Event[T, A]], None]] = []
-        self.once_subs:list[Callable[[Event[T, A]], None]] = []
-        self.events: list[Event[T, A]] = []
+        self._subs: list[Callable[[Event[T, A]], None]] = []
+        self._once_subs: list[Callable[[Event[T, A]], None]] = []
+        self._events: list[Event[T, A]] = []
         self._try_it_lock = False
 
     def emit(self, event: Event[T, A]) -> None:
         """
         emit a event for channel
         """
-        self.events.append(event)
+        self._events.append(event)
         self._try_it()
 
     def on(self, callback: Callable[[Event[T, A]], None]) -> None:
         """
         call the callback when a event coming
         """
-        self.subs.append(callback)
+        self._subs.append(callback)
         self._try_it()
 
     def once(self, callback: Callable[[Event[T, A]], None]) -> None:
         """
         call the callback disposable when a event coming
         """
-        self.once_subs.append(callback)
+        self._once_subs.append(callback)
         self._try_it()
 
     def remove(self, callback: Callable[[Event[T, A]], None]) -> None:
         """
         remove the callback from both on and once
         """
-        if callback in self.subs:
-            self.subs.remove(callback)
+        if callback in self._subs:
+            self._subs.remove(callback)
 
-        if callback in self.once_subs:
-            self.once_subs.remove(callback)
+        if callback in self._once_subs:
+            self._once_subs.remove(callback)
 
     def _try_it(self) -> None:
-        if (not self.events
-            or not self.subs
-            or not self.once_subs
-            or self._try_it_lock): return
+        if self._try_it_lock:
+            return
         self._try_it_lock = True
-        while len(self.events) > 0:
-            event = self.events.pop(0)
-            for sub in self.subs[:]:
+        while len(self._events) > 0:
+            event = self._events.pop(0)
+            for sub in self._subs[:]:
                 try:
                     sub(event)
                 except Exception as e:
                     logger.exception("error while running callback: %s", e)
-            for sub in self.once_subs[:]:
+            for sub in self._once_subs[:]:
                 try:
                     sub(event)
                 except Exception as e:
                     logger.exception("error while running callback: %s", e)
                 finally:
-                    self.once_subs.remove(sub)
+                    self._once_subs.remove(sub)
 
         self._try_it_lock = False
 
     def __len__(self) -> int:
         """
-        len of all events
+        len of all subscribers
         """
-        return len(self.events)
+        return len(self._subs) + len(self._once_subs)
 
     def __bool__(self) -> bool:
         """
         has any subscribers
         """
-        return len(self.subs) != 0 or len(self.once_subs) != 0
+        return len(self) != 0
+
+
+class ChannelLike(Protocol):
+    """
+    the channellike which needs have emit, on, once and remove
+    """
+
+    def emit(self, event: Event) -> None: ...
+    def on(self, callback: Callable[[Event], None]) -> None: ...
+    def once(self, callback: Callable[[Event], None]) -> None: ...
+    def remove(self, callback: Callable[[Event], None]) -> None: ...
+
 
 class PubSubManager:
-    _channels: dict[str, Channel] = {}
+    _channels: dict[str, ChannelLike] = {}
 
-    def push(self, name: str, channel: Channel) -> None:
+    def push(self, name: str, channel: ChannelLike) -> None:
         """
         push a channel to manager that everyone can see it
         ( warning! lost type hint )
         """
-        self._channels[name] = channel
+        self._channels.setdefault(name, channel)
 
-    def get(self, name: str) -> (Channel | None):
+    def get(self, name: str) -> (ChannelLike | None):
         """
         get a channel from manager
         ( warning! lost type hint, use cost to get type hint )
         """
         return self._channels.get(name)
 
-    def remove(self, name: str) -> (Channel | None):
+    def remove(self, name: str) -> (ChannelLike | None):
         """
         remove the channel when don't needed
         """
         if name in self._channels:
             return self._channels.pop(name)
+
+        return None
+
