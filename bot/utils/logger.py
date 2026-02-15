@@ -14,7 +14,7 @@ file_prefix = datetime.now().isoformat()
 def get_logger(
     value: str,
     logging_dir: Path = this_file.parent.parent / "logs"
-) -> logging.Logger:
+) -> tuple[logging.Logger, logging.StreamHandler, logging.FileHandler]:
     """
     an function returns a logger by name
     """
@@ -25,7 +25,7 @@ def get_logger(
 def get_logger(
     value: logging.Logger,
     logging_dir: Path = this_file.parent.parent / "logs"
-) -> logging.Logger:
+) -> tuple[logging.Logger, logging.StreamHandler, logging.FileHandler]:
     """
     an empty logger pack for log
     """
@@ -33,11 +33,11 @@ def get_logger(
 
 
 def get_logger(
-        value,
+        value: object,
         logging_dir=this_file.parent.parent / "logs"
-) -> logging.Logger:
+):
     """Get a configured logger instance."""
-    logger: logging.Logger = logging.getLogger(f"bot_logger ( {value} ) : ")
+    logger: logging.Logger = logging.getLogger(str(value))
     if isinstance(value, logging.Logger):
         logger = value
 
@@ -48,16 +48,15 @@ def get_logger(
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s: %(message)s')
+        '( %(name)s ) - %(asctime)s - %(levelname)s: %(message)s')
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
     logging_file = logging_dir / f"{file_prefix}.log"
 
     fh = logging.FileHandler(logging_file, encoding="utf-8")
-
     fh.setFormatter(formatter)
-    ch.setLevel(logging.DEBUG)
+    fh.setLevel(logging.DEBUG)
     logger.addHandler(fh)
 
-    return logger
+    return (logger, ch, fh)

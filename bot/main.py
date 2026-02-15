@@ -2,21 +2,109 @@
 Main pointer
 """
 import asyncio
-import logging
+from collections.abc import Callable
+import datetime
 import sys
 import subprocess
 from pathlib import Path
+from random import choice, uniform
 from aiohttp.client_exceptions import ConnectionTimeoutError
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from cogs.cogs_finder import CogsFinder
 from config.config_loader import ConfigLoader
 from utils.logger import get_logger
 
-logger: logging.Logger = get_logger(__name__)
+logger, *_ = get_logger(__name__)
 
 cogs: list[str] = []
+
+ACTIVITY_CODE: dict[str, list[str]] = {
+    "coding": [
+        "print(\"hello world!\")",
+        "Compiling...",
+        "Debugging errors",
+        "Writing some code",
+        "Waiting for CI/CD pipeline",
+        "Choosing from 0 and 1",
+        "Naming foos and bars",
+    ],
+    "gaming": [
+        "Playing chess",
+        "Mining in Minecraft",
+        "Playing Roblox",
+        "Building 90s in fortnite",
+        "Finding Mario's princess",
+        "Looking for diamonds",
+        "Racing through tracks",
+    ],
+    "music": [
+        "Listening to tunes",
+        "Composing a new song",
+        "Jamming to beats",
+        "Mixing tracks",
+        "Making some lo-fis",
+    ],
+    "reading": [
+        "Reading a thrilling novel",
+        "Exploring new worlds in books",
+        "Learning new things",
+        "Diving into fantasy realms",
+        "Studying fascinating topics",
+        "Trying to understand manuals...",
+    ],
+    "other": [
+        "Chatting with friends",
+        "Watching a movie",
+        "Cooking a delicious meal",
+        "Traveling the world",
+        "Exercising and staying fit",
+        "Meditating for peace",
+        "Editing photos",
+        "Choosing a new hobby",
+        "Completing tasks",
+    ],
+    "puns": [
+        "Resolving Promises",
+        "Thinking about this and that",
+        "Awaiting results",
+        "Handling callbacks",
+        "Cutting Threads",
+        "Running Loops",
+        "Fetching Data",
+    ],
+    "ai": [
+        "Generating text...",
+        "Analyzing data...",
+        "Learning from patterns...",
+        "Creating art...",
+        "Understanding language...",
+        "Deep Thinking...",
+        "Planning ideas...",
+    ],
+}
+
+STATUS_RULES: list[
+        Callable[
+            [datetime.datetime, str], 
+            tuple[bool, discord.Status]
+            ]
+        ] = [
+    ( lambda _, key: ( key in ["coding"], discord.Status.dnd) ),
+    ( lambda now, _: ( now.hour <= 5 or now.hour >= 22, discord.Status.idle) ),
+    ( lambda *_: (True, discord.Status.online) ) # default
+]
+
+ACTIVITY_RULES: list[
+        Callable[
+            [datetime.datetime, str, str],
+            tuple[bool, discord.activity.BaseActivity]
+            ]
+        ] = [
+    ( lambda _, key, value: ( key in ["music"], discord.Activity(type=discord.ActivityType.listening, name=value) ) ),
+    ( lambda _, __, value: ( True, discord.activity.CustomActivity(name=value) ) ), # default
+]
 
 # use subprocess to run backend_file
 
@@ -24,7 +112,7 @@ cogs: list[str] = []
 async def run_service() -> None:
     logger.info("start run the backend file")
 
-    path = Path("./utils/service.py").resolve()
+    path = Path("./ext/service.py").resolve()
 
     # check the file exsits
     if not path.exists():
@@ -40,7 +128,7 @@ async def run_service() -> None:
         stderr=sys.stderr
     )
 
-    await asyncio.sleep(2.2)
+    await asyncio.sleep(uniform(2,4)) # wait a small random time to check the process
 
     if thread.poll() is not None:
         logger.warning(
@@ -66,17 +154,21 @@ bot: commands.Bot = commands.Bot(
 
 # default commands: ping, help, listCogs
 @bot.tree.command(name="ping", description="Check bot latency")
-async def ping(interaction: discord.Interaction):
+async def ping(interaction: discord.Interaction) -> None:
     logger.debug('%s runned the ping command', interaction.user.display_name)
 
     await interaction.response.defer(ephemeral=True)
     embed = discord.Embed(
         title="Pong!",
-        description=f"Client user: {interaction.client.user.name}", # type: ignore[none]
         color=discord.Color.green(),
         timestamp=discord.utils.utcnow()
     )
     embed.set_footer(text=f"requested by {interaction.user.name}")
+    embed.add_field(
+            name="bot username",
+            value=interaction.client.user.name, # type: ignore[optional]
+            inline=False
+            )
     embed.add_field(
             name="latency",
             value=f"{round(interaction.client.latency  * 1000, 2)}ms",
@@ -108,12 +200,13 @@ async def list_cogs(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# handle the error imof command
+# handle the error of command
 @bot.event
 async def on_command_error(ctx: commands.Context, error: discord.errors.DiscordException) -> None:
     if isinstance(error, commands.CommandNotFound): return
     logger.exception("failed to run command, error: %s", error)
     await ctx.send(f"raised an error while running command, error: {error}")
+
 
 @bot.tree.error
 async def on_app_command_error(
@@ -131,20 +224,51 @@ async def on_app_command_error(
             color=0xff0000,
             timestamp=discord.utils.utcnow()
         )
-    logger.exception("Error while running command %s, error: %s",
+    logger.exception("Error while running command %s, \n\nerror: %s",
                      interaction.command.name
-                     if interaction.command else "Unknown", 
+                     if interaction.command else "Unknown name", 
                      error
                      )
 
     await send(embed=embed, ephemeral=True)
 
 
+def get_status(now: datetime.datetime, activity_key: str) -> discord.Status:
+    """get status based on time and status key"""
+    for func in STATUS_RULES:
+        check, status = func(now, activity_key)
+        if check:
+            return status
+    return discord.Status.online
+
+def get_activity(now: datetime.datetime, activity_key: str, activity_msg: str) -> discord.activity.BaseActivity:
+    """get activity type by now and status key"""
+    for func in ACTIVITY_RULES:
+        check, activity = func(now, activity_key, activity_msg)
+        if check:
+            return activity
+    return discord.activity.CustomActivity(name=activity_msg)
+
+# adding activity handler task
+@tasks.loop(minutes=10)
+async def set_activity() -> None:
+    """set bot activity randomly"""
+    now = discord.utils.utcnow()
+    logger.debug("Setting activity at %s", now.isoformat())
+    activity_key = choice(list(ACTIVITY_CODE.keys()))
+    activity_msg = choice(ACTIVITY_CODE[activity_key])
+    await bot.change_presence(
+        status=get_status(now, activity_key),
+        activity=get_activity(now, activity_key, activity_msg)
+    )
+    logger.info("Activity set to type: %s, name: %s", activity_key, activity_msg)
+
 # prints and sync when ready
 @bot.event
 async def on_ready() -> None:
-
-    assert bot.user is not None, "how it did?!"
+    if not bot.user:
+        logger.error("How the bot user is None???")
+        return
 
     logger.info(
         "logged in as %s (id: %s)",
@@ -156,7 +280,7 @@ async def on_ready() -> None:
         "Loaded Commands: %i",
         len(list(bot.tree.walk_commands()))
     )
-
+    set_activity.start()
 
 async def main():
     # load cogs

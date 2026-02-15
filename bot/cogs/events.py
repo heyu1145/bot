@@ -3,7 +3,6 @@ event manage command handler
 """
 from datetime import timedelta
 import discord
-from discord.enums import EntityType, PrivacyLevel
 from discord.ext import commands
 from discord import app_commands
 
@@ -12,73 +11,119 @@ class EventsCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @app_commands.command(name="create_event")
-    @app_commands.describe(
-        name="the name of event",
-        description="the description of the event",
-        start_time="the delta from now of the event (minutes)",
-        duration="the duration of the event (minutes)",
-        location="the location of event ( warn! use channel instead for voice and stage )",
-        channel="the channel of event ( warn! use location instead for external )",
+    event_group = app_commands.Group(
+        name="event",
+        description="server scheduled event handler",
+        guild_only=True
     )
-    @app_commands.guild_only()
-    @app_commands.checks.has_permissions(manage_events=True)
+    event_create_group = app_commands.Group(
+        name="create",
+        description="create a event by command",
+        parent=event_group,
+        default_permissions=discord.Permissions(manage_events=True)
+    )
+
+    @event_create_group.command(name="inplace")
+    @app_commands.describe(
+            channel="the channel the event at",
+            name="the name of the event",
+            description="the description of the event",
+            start_delta="the time delta from now ( use minutes )",
+            duration="the duration of the event ( use minutes )"
+    )
     @app_commands.checks.bot_has_permissions(manage_events=True)
-    async def create_event(
-        self,
-        interaction: discord.Interaction,
-        name: str,
-        description: str,
-        start_time: app_commands.Range[int, 10, 1440*3],
-        duration: app_commands.Range[int, 10, 360*12],
-        location: str | None = None,
-        channel: discord.VoiceChannel | discord.StageChannel | None = None
-    ) -> None:
+    async def channel_create_inplace(
+            self,
+            interaction: discord.Interaction,
+            channel: discord.VoiceChannel | discord.StageChannel,
+            name: str,
+            description: str,
+            start_delta: app_commands.Range[int, 10, 60*24*7],
+            duration: app_commands.Range[int, 10, 60*12]
+            ) -> None:
         """
-        create a scheduled event from this guild
+        create the event that place is in this server
         """
-        if not interaction.guild:
-            await interaction.response.send_message("only can use it within a server!")
-            return
-
-        if bool(channel) == bool(location):
-            await interaction.response.send_message(
-                f"conflict, {
-                    'only need location or channel, but given both'
-                    if location
-                    else 'needed location or channel, but have None'
-                }")
-            return
-
         await interaction.response.defer(ephemeral=True)
+        if not interaction.guild:
+            raise app_commands.CheckFailure("this command can only used in server")
 
-        entity: dict = {
-            "channel": channel,
-            "entity_type": EntityType.voice
-            if isinstance(channel, discord.VoiceChannel)
-            else EntityType.stage_instance
-        } if channel else {
-            "location": location,
-            "entity_type": EntityType.external
-        }
+        if not interaction.guild.me.guild_permissions.manage_events:
+            raise app_commands.BotMissingPermissions(["mamage_events"])
+
+        start = discord.utils.utcnow() + timedelta(minutes=start_delta)
+        end = start + timedelta(minutes=duration)
+        event = await interaction.guild.create_scheduled_event(
+                name=name,
+                description=description,
+                channel=channel,
+                entity_type=discord.EntityType.voice
+                    if isinstance(channel, discord.VoiceChannel)
+                    else discord.EntityType.stage_instance,
+                privacy_level=discord.PrivacyLevel.guild_only,
+                start_time=start,
+                end_time=end,
+                reason=f"{interaction.user.name} called"
+                )
+
+        embed = discord.Embed(
+            title="success",
+            description=f"the event had created, jump_url at [here]({event.url})",
+            timestamp=discord.utils.utcnow(),
+            color=discord.Color.green()
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @event_create_group.command(name="external")
+    @app_commands.describe(
+            name="the name of the event",
+            description="the description of the event",
+            location="the location of the event",
+            start_delta="the start delta from now ( use minutes )",
+            duration="the duration of the event ( use minutes )"
+            )
+    @app_commands.checks.bot_has_permissions(manage_events=True)
+    async def event_create_external(
+            self,
+            interaction: discord.Interaction,
+            name: str,
+            description: str,
+            location: str,
+            start_delta: app_commands.Range[int, 10, 60*24*7],
+            duration: app_commands.Range[int, 10, 60*12]
+            ) -> None:
+        """
+        create event at external place
+        """
+        await interaction.response.defer(ephemeral=True)
+        if not interaction.guild:
+            raise app_commands.CheckFailure("This command can only use in server")
+        
+        if not interaction.guild.me.guild_permissions.manage_events:
+            raise app_commands.BotMissingPermissions(["manage_events"])
+
+        start = discord.utils.utcnow() + timedelta(minutes=start_delta)
+        end = start + timedelta(minutes=duration)
 
         event = await interaction.guild.create_scheduled_event(
-            name=name,
-            description=description,
-            **entity,
-            start_time=discord.utils.utcnow() +
-            timedelta(minutes=start_time),
-            end_time=discord.utils.utcnow() + timedelta(minutes=start_time) +
-            timedelta(minutes=duration),
-            privacy_level=PrivacyLevel.guild_only
+                name=name,
+                description=description,
+                location=location,
+                entity_type=discord.EntityType.external,
+                privacy_level=discord.PrivacyLevel.guild_only,
+                start_time=start,
+                end_time=end,
+                reason=f"{interaction.user.name} called"
+            )
+        
+        embed = discord.Embed(
+                title="success",
+                description=f"the event had created, jump url at [here]({event.url})",
+                color=discord.Color.green(),
+                timestamp=discord.utils.utcnow()
         )
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
-        finally_embed = discord.Embed(
-            description=f"successfully created the scheduled event: {event.url}",
-            timestamp=discord.utils.utcnow(),
-            color=0x0000ff
-        )
-        await interaction.followup.send(embed=finally_embed, ephemeral=True)
 
 
 async def setup(bot: commands.Bot) -> None:

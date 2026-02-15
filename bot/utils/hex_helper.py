@@ -30,7 +30,7 @@ def handle_short_string(s: str, /) -> str:
 
 def normalize_hex_color(color: str | int) -> str:
     """
-    Convent str or integer input to 6-digits hex format (000000-FFFFFF)
+    Convert str or integer input to 6-digits hex format (000000-FFFFFF)
 
     Args:
         color:
@@ -38,9 +38,8 @@ def normalize_hex_color(color: str | int) -> str:
             - String format ( include RGB, RRGGBB, #RGB, #RRGGBB )
 
     Returns:
-        6-digits upper case format string
-
-    we are highly recommend use string format for better expression
+        000000 if invalid
+        else 6-digits upper case format string
     """
     if isinstance(color, int):
         # < 0 is 0 and > 0xffffff is 0xffffff
@@ -60,7 +59,7 @@ def normalize_hex_color(color: str | int) -> str:
 
 def to_color_int(color: str | int) -> int:
     """
-    Convent str or int to hex integer
+    convert str or int to hex integer
 
     Args:
         color:
@@ -85,7 +84,7 @@ def to_color_int(color: str | int) -> int:
 
 def split_rgb(rgb: str | int, /) -> tuple[int, int, int]:
     """
-    convent rgb string to tuple of r, g and b
+    convert rgb string to tuple of r, g and b
     """
     rgb = to_color_int(rgb)
     return (
@@ -97,20 +96,26 @@ def split_rgb(rgb: str | int, /) -> tuple[int, int, int]:
 
 def rgba_to_rgb(rgba: str | int, bg: str | int = "#ffffff") -> str:
     """
-    convent the rgba to the same rgb with the background
+    Convert RGBA color to RGB by compositing over a background color.
 
     Args:
         rgba:
-            the rgba format ( #RGBA / #RRGGBBAA or 0xRRGGBBAA )
-        bg: 
-            the rgb format ( same as `normalize_hex_color` )
+        RGBA format in hex string or int:
+            - #RGBA (4-digit shorthand, e.g. #F00F → semi-transparent red)
+            - #RRGGBBAA (8-digit, e.g. #FF000080)
+            - 0xRRGGBBAA (8-digit with prefix)
+            Note: Only RRGGBBAA order is supported (alpha in low bits).
+        bg:
+            Background RGB color (same formats as normalize_hex_color).
+            Alpha in bg is ignored.
 
     Returns:
-        the rgb of rgba with background ( 6-digits upper case format )
-    """
+        6-digit uppercase hex RGB string after alpha compositing.
+        Returns "000000" on invalid input.
+   """
     bg_r, bg_g, bg_b = split_rgb(bg)
     if isinstance(rgba, int):
-        # int convent to istr
+        # int convert to istr
         rgba = f"{max(0, rgba) & 0xffffffff:08X}"
 
     rgba = normalize_string(rgba)

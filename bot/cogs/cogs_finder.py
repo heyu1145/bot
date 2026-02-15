@@ -1,13 +1,11 @@
 """
 Load cogs from user imported dir ( default this Dir )
 """
-
-from logging import Logger
 from pathlib import Path
 from discord.ext import commands
 from utils.logger import get_logger
 
-logger: Logger = get_logger(__name__)
+logger, *_= get_logger(__name__)
 
 this_file: str = Path(__file__).name
 default_dir: str = Path(__file__).parent.name

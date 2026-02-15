@@ -1,175 +1,78 @@
 """
-channel manager of the bot
+channels helper
 """
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.abc import GuildChannel
+from utils.utils import multi_set_fields
 
-class ChannelCog(commands.Cog):
+
+class ChannelsCog(commands.Cog):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @app_commands.command(name="channel_info")
-    @app_commands.describe(
-            channel="the channel you want to view"
-            )
-    @app_commands.guild_only()
-    @app_commands.checks.bot_has_permissions(view_channel=True)
-    async def view_channel(
+    channels_group = app_commands.Group(
+        name="channels",
+        description="channels options",
+        guild_only=True
+    )
+
+    @channels_group.command(name="view")
+    @app_commands.describe(channel="the channel to view")
+    async def channel_view(
             self,
             interaction: discord.Interaction,
-            channel: GuildChannel | None = None
-            ) -> None:
+            channel: discord.abc.GuildChannel
+    ) -> None:
         """
-        shows the info of the channel(default this channel)
+        view the channel's status
         """
-        if not channel:
-            if not isinstance(interaction.channel, GuildChannel):
-                errembed = discord.Embed(
-                        description="Cannot use it in dm!",
-                        color=0xff0000,
-                        timestamp=discord.utils.utcnow()
-                    )
-                await interaction.response.send_message(embed=errembed, ephemeral=True)
-                return
-            
-            channel = interaction.channel
-
-        bot_member = channel.guild.me
-        bot_perm = channel.permissions_for(bot_member)
-
-        if not bot_perm.view_channel:
-            errembed = discord.Embed(
-                    description="I have no enough Permission for the channel {channel.jump_url}",
-                    color=0xff0000,
-                    timestamp=discord.utils.utcnow()
-                    )
-            await interaction.response.send_message(embed=errembed)
-            return
-
         await interaction.response.defer(ephemeral=True)
+        if not interaction.guild:
+            raise app_commands.CheckFailure(
+                "Thid command can only used in server")
 
-        embed = discord.Embed(
-                title=f"the info of {channel.jump_url}",
-                color=0xff8800,
-                timestamp=discord.utils.utcnow()
-            )
+        if not channel.permissions_for(channel.guild.me).view_channel:
+            raise app_commands.BotMissingPermissions(["view_channel"])
 
-        embed.set_footer(text=f"Request by {interaction.user.name}")
+        basic_embed = discord.Embed(
+            title=f"{channel.name}'s info",
+            color=0xff,
+            timestamp=discord.utils.utcnow()
+        )
 
-
+        multi_set_fields(
+            basic_embed,
+            channel_type=channel.type.name,
+            created_at=discord.utils.format_dt(channel.created_at, "F"),
+            from_now=discord.utils.format_dt(channel.created_at, "R")
+        )
         match channel:
-            case discord.TextChannel(nsfw=nsfw, 
-                                     slowmode_delay=slowmode, 
-                                     topic=topic):
-                embed.add_field(
-                        name="is nsfw (not safe for work)",
-                        value=nsfw,
-                        inline=True
-                        )
-
-                embed.add_field(
-                        name="slowmode delay",
-                        value=slowmode,
-                        inline=True
-                        )
-
-                embed.add_field(
-                        name='topic',
-                        value=topic,
-                        inline=True
-                         )
-                embed.add_field(
-                        name="channel member count",
-                        value=len(channel.members),
-                        inline=True
-                        )
-
-            case discord.VoiceChannel(
-                    nsfw=nsfw, 
-                    bitrate=bitrate, 
-                    user_limit=limit, 
-                    slowmode_delay=slowmode):
-
-                embed.add_field(
-                        name="is nsfw (not safe for work)",
-                        value=nsfw,
-                        inline=True
-                        )
-                
-                embed.add_field(
-                        name='slowmode delay',
-                        value=slowmode,
-                        inline=True
-                        )
-
-                embed.add_field(
-                        name='voice bitrate',
-                        value=bitrate,
-                        inline=True
-                        )
-
-                embed.add_field(
-                        name='user count',
-                        value=f"{len(channel.members)}/{limit if limit else 'inf'}",
-                        inline=True
-                        )
-
-            case discord.CategoryChannel(nsfw=nsfw):
-                embed.add_field(
-                        name="is nsfw (not safe for work)",
-                        value=nsfw,
-                        inline=True
-                        )
-
-            case discord.StageChannel(
+            case discord.TextChannel(
                     nsfw=nsfw,
-                    bitrate=bitrate, 
-                    topic=topic, 
-                    slowmode_delay=slowmode,
-                    user_limit=limit):
+                    members=members,
+                    slowmode_delay=slowmode_delay
+            ):
+                multi_set_fields(
+                    basic_embed,
+                    is_nsfw=nsfw,
+                    members=len(members),
+                    slowmode=f"{slowmode_delay} sec",
+                )
+            case discord.VoiceChannel(
+                nsfw=nsfw,
+                members=members,
+                bitrate=bitrate
+            ):
+                multi_set_fields(
+                    basic_embed,
+                    is_nsfw=nsfw,
+                    members=len(members),
+                    bitrate=bitrate,
+                )
 
-                embed.add_field(
-                        name="is nsfw (not safe for work)",
-                        value=nsfw,
-                        inline=True
-                        )
+        await interaction.followup.send(embed=basic_embed, ephemeral=True)
 
-                embed.add_field(
-                        name='slowmode delay',
-                        value=slowmode,
-                        inline=True
-                        )
-
-                embed.add_field(
-                        name='topic',
-                        value=topic,
-                        inline=True
-                        )
-
-                embed.add_field(
-                        name='bitrate',
-                        value=bitrate,
-                        inline=True
-                        )
-
-                embed.add_field(
-                        name='user',
-                        value=f"{len(channel.members)}/{limit if limit else 'inf'}",
-                        inline=True
-                        )
-
-            case discord.ForumChannel(topic=topic):
-                embed.add_field(
-                        name='topic',
-                        value=topic,
-                        inline=True
-                        )
-
-        await interaction.followup.send(embed=embed,ephemeral=True)
-
-            
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(ChannelCog(bot))
+    await bot.add_cog(ChannelsCog(bot))

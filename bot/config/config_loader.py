@@ -3,14 +3,15 @@ load config from imported dir (default . ),
 load token from .env file
 """
 import os
+from sys import getdefaultencoding
 from pathlib import Path
-from logging import Logger
 from dotenv import load_dotenv
 import json
 from utils.logger import get_logger
 from custom_errors import ConfigLoadError, MissingTokenError
 
-logger: Logger = get_logger(__name__)
+charset = getdefaultencoding()
+logger, *_ = get_logger(__name__)
 
 default = {"prefix": "!"}
 
@@ -22,17 +23,17 @@ class ConfigLoader:
         self.config_dir: str = config_dir
         self.config: dict = {}
 
-    def load_config(self, config_filename: str = "config.json") -> dict:
+    def load_config(self, config_filename: str = "config.json", encoding: str = charset) -> dict:
         config_path = Path(self.config_dir) / config_filename
 
         try:
-            with open(config_path, 'r', encoding='utf-8') as config_file:
+            with open(config_path, 'r', encoding=encoding) as config_file:
                 self.config = json.load(config_file)
             logger.info("Loaded config from %s", config_path)
         except FileNotFoundError:
             logger.warning(
                 f"Config file not found at %s, default %s", config_path, default)
-            with open(config_path, 'w') as config_file:
+            with open(config_path, 'w', encoding=encoding) as config_file:
                 json.dump(default, config_file)
         except Exception as e:
             logger.exception("Failed to load config from %s: %s",
