@@ -44,9 +44,9 @@ def get_logger(
     if not logging_dir.exists():
         logging_dir.mkdir()
 
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
+    ch.setLevel(logging.INFO)
     formatter = logging.Formatter(
         '( %(name)s ) - %(asctime)s - %(levelname)s: %(message)s')
     ch.setFormatter(formatter)

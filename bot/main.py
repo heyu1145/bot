@@ -4,10 +4,14 @@ Main pointer
 import asyncio
 from collections.abc import Callable
 import datetime
+import json
+import signal
 import sys
 import subprocess
 from pathlib import Path
 from random import choice, uniform
+from types import FrameType
+from typing import NoReturn
 from aiohttp.client_exceptions import ConnectionTimeoutError
 import discord
 from discord import app_commands
@@ -15,6 +19,7 @@ from discord.ext import commands, tasks
 from cogs.cogs_finder import CogsFinder
 from config.config_loader import ConfigLoader
 from utils.logger import get_logger
+from utils.utils import convert_sub_tree, jsonify_sub_tree
 
 logger, *_ = get_logger(__name__)
 
@@ -85,26 +90,7 @@ ACTIVITY_CODE: dict[str, list[str]] = {
     ],
 }
 
-STATUS_RULES: list[
-        Callable[
-            [datetime.datetime, str], 
-            tuple[bool, discord.Status]
-            ]
-        ] = [
-    ( lambda _, key: ( key in ["coding"], discord.Status.dnd) ),
-    ( lambda now, _: ( now.hour <= 5 or now.hour >= 22, discord.Status.idle) ),
-    ( lambda *_: (True, discord.Status.online) ) # default
-]
-
-ACTIVITY_RULES: list[
-        Callable[
-            [datetime.datetime, str, str],
-            tuple[bool, discord.activity.BaseActivity]
-            ]
-        ] = [
-    ( lambda _, key, value: ( key in ["music"], discord.Activity(type=discord.ActivityType.listening, name=value) ) ),
-    ( lambda _, __, value: ( True, discord.activity.CustomActivity(name=value) ) ), # default
-]
+backend_process: subprocess.Popen[bytes] | None = None
 
 # use subprocess to run backend_file
 
@@ -112,7 +98,7 @@ ACTIVITY_RULES: list[
 async def run_service() -> None:
     logger.info("start run the backend file")
 
-    path = Path("./ext/service.py").resolve()
+    path = (Path(".") / "ext" / "service.py").resolve()
 
     # check the file exsits
     if not path.exists():
@@ -122,19 +108,50 @@ async def run_service() -> None:
         )
         return
 
-    thread = subprocess.Popen(
+    process = subprocess.Popen(
         [sys.executable, str(path)],
         stdout=sys.stdout,
         stderr=sys.stderr
     )
 
-    await asyncio.sleep(uniform(2,4)) # wait a small random time to check the process
+    global backend_process
+    backend_process = process
 
-    if thread.poll() is not None:
+    # wait a small random time to check the process
+    await asyncio.sleep(uniform(2, 4))
+
+    if process.poll() is not None:
+        backend_process = None
         logger.warning(
-            "failed to start backend file!, return code: %i", thread.poll())
+            "failed to start backend file!, return code: %i", process.poll())
     else:
         logger.info("start successful")
+
+
+def cleanup() -> None:
+    global backend_process
+    if not backend_process or backend_process.poll() is not None:
+        logger.info("backend process exited.")
+        return
+
+    logger.debug("terminating backend...")
+    backend_process.terminate()
+    try:
+        backend_process.wait(uniform(2, 4))
+    except subprocess.TimeoutExpired:
+        logger.warning("terminate failed, killing it...")
+        backend_process.kill()
+
+
+def signal_handler(sig: int, frame: FrameType | None) -> NoReturn:
+    _ = frame
+    logger.debug("handled signal %i, exiting...", sig)
+    cleanup()
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # load configs
 config_loader: ConfigLoader = ConfigLoader()
@@ -165,15 +182,15 @@ async def ping(interaction: discord.Interaction) -> None:
     )
     embed.set_footer(text=f"requested by {interaction.user.name}")
     embed.add_field(
-            name="bot username",
-            value=interaction.client.user.name, # type: ignore[optional]
-            inline=False
-            )
+        name="bot username",
+        value=interaction.client.user.name,  # type: ignore[optional]
+        inline=False
+    )
     embed.add_field(
-            name="latency",
-            value=f"{round(interaction.client.latency  * 1000, 2)}ms",
-            inline=False
-            )
+        name="latency",
+        value=f"{round(interaction.client.latency * 1000, 2)}ms",
+        inline=False
+    )
     await interaction.followup.send(embed=embed, ephemeral=True)
 
 
@@ -184,9 +201,17 @@ async def help_command(interaction: discord.Interaction):
         description="This is a help message.",
         color=discord.Color.blue()
     )
-    for cog in bot.tree.walk_commands():
-        embed.add_field(name=cog.name,
-                        value=cog.description, inline=False)
+    for cmd in bot.tree.walk_commands():
+        if isinstance(cmd, app_commands.Group):
+            continue
+        parents: list[str] = []
+        temp = cmd
+        while temp is not None:
+            parents.append(temp.name)
+            temp = temp.parent
+
+        embed.add_field(name=f"/" + " ".join(reversed(parents)),
+                        value=cmd.description, inline=False)
 
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -201,36 +226,62 @@ async def list_cogs(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # handle the error of command
+
+
 @bot.event
 async def on_command_error(ctx: commands.Context, error: discord.errors.DiscordException) -> None:
-    if isinstance(error, commands.CommandNotFound): return
+    if isinstance(error, commands.CommandNotFound):
+        return
     logger.exception("failed to run command, error: %s", error)
     await ctx.send(f"raised an error while running command, error: {error}")
 
 
 @bot.tree.error
 async def on_app_command_error(
-        interaction: discord.Interaction, 
+        interaction: discord.Interaction,
         error: app_commands.errors.AppCommandError
-        ) -> None:
+) -> None:
     if interaction.response.is_done():
         send = interaction.followup.send
     else:
         send = interaction.response.send_message
 
     embed = discord.Embed(
-            title="Error",
-            description=error,
-            color=0xff0000,
-            timestamp=discord.utils.utcnow()
-        )
+        title="Error",
+        description=error,
+        color=0xff0000,
+        timestamp=discord.utils.utcnow()
+    )
     logger.exception("Error while running command %s, \n\nerror: %s",
                      interaction.command.name
-                     if interaction.command else "Unknown name", 
+                     if interaction.command else "Unknown name",
                      error
                      )
 
     await send(embed=embed, ephemeral=True)
+
+
+STATUS_RULES: list[
+    Callable[
+        [datetime.datetime, str],
+        tuple[bool, discord.Status]
+    ]
+] = [
+    (lambda _, key: (key in ["coding"], discord.Status.dnd)),
+    (lambda now, _: (now.hour <= 5 or now.hour >= 22, discord.Status.idle)),
+    (lambda *_: (True, discord.Status.online))  # default
+]
+
+ACTIVITY_RULES: list[
+    Callable[
+            [datetime.datetime, str, str],
+        tuple[bool, discord.activity.BaseActivity]
+    ]
+] = [
+    (lambda _, key, value: (key in ["music"], discord.Activity(
+        type=discord.ActivityType.listening, name=value))),
+    (lambda _, __, value: (True, discord.activity.CustomActivity(name=value))),  # default
+]
 
 
 def get_status(now: datetime.datetime, activity_key: str) -> discord.Status:
@@ -241,6 +292,7 @@ def get_status(now: datetime.datetime, activity_key: str) -> discord.Status:
             return status
     return discord.Status.online
 
+
 def get_activity(now: datetime.datetime, activity_key: str, activity_msg: str) -> discord.activity.BaseActivity:
     """get activity type by now and status key"""
     for func in ACTIVITY_RULES:
@@ -250,6 +302,8 @@ def get_activity(now: datetime.datetime, activity_key: str, activity_msg: str) -
     return discord.activity.CustomActivity(name=activity_msg)
 
 # adding activity handler task
+
+
 @tasks.loop(minutes=10)
 async def set_activity() -> None:
     """set bot activity randomly"""
@@ -261,9 +315,12 @@ async def set_activity() -> None:
         status=get_status(now, activity_key),
         activity=get_activity(now, activity_key, activity_msg)
     )
-    logger.info("Activity set to type: %s, name: %s", activity_key, activity_msg)
+    logger.info("Activity set to type: %s, name: %s",
+                activity_key, activity_msg)
 
 # prints and sync when ready
+
+
 @bot.event
 async def on_ready() -> None:
     if not bot.user:
@@ -280,9 +337,18 @@ async def on_ready() -> None:
         "Loaded Commands: %i",
         len(list(bot.tree.walk_commands()))
     )
+    logger.info("current tree:")
+    logger.info(json.dumps(
+        jsonify_sub_tree(
+            convert_sub_tree(bot)
+        ),
+        indent=4, ensure_ascii=False
+    )
+    )
     set_activity.start()
 
-async def main():
+
+async def main() -> None:
     # load cogs
     cogs_finder = CogsFinder(bot)
     successcount, failcount = await cogs_finder.load_cogs()
@@ -297,16 +363,13 @@ async def main():
     # run bot
     try:
         await bot.start(token)
-    except discord.LoginFailure:
-        logger.exception("The token does not exsits in discord! exiting...")
+    except ConnectionTimeoutError:
+        logger.error("Connection Timed Out, Check your connection")
+    except discord.LoginFailure as e:
+        logger.exception("Login failed! error: %s", e)
         raise
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("KeyboardInterrupt handled! exiting...")
-    except ConnectionTimeoutError:
-        logger.warning("Connection Error! try check your connection")
+    asyncio.run(main())
 else:
     logger.warning("you should not run it by module!")

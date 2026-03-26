@@ -2,9 +2,10 @@
 an utils function include all unknown type func
 """
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Protocol, cast, overload
-import asyncio
+from typing import Literal, Protocol, TypedDict, cast, overload
+import inspect
 import discord
+from discord.ext import commands
 
 @overload
 async def maybe_coro[T](
@@ -42,7 +43,7 @@ async def maybe_coro[T](
     Returns:
         func's returns
     """
-    if asyncio.iscoroutinefunction(func):
+    if inspect.iscoroutinefunction(func):
         return await func(*args, **kwargs)
 
     return cast(T, func(*args, **kwargs))
@@ -65,7 +66,7 @@ class ToReprAble(Protocol):
         ...
 
 
-StringLike = ToStringAble | ToReprAble
+type StringLike = ToStringAble | ToReprAble
 
 
 def human_like_join(
@@ -136,3 +137,78 @@ def multi_set_fields(
         )
 
     return embed
+
+class GroupSub(TypedDict):
+    subcommands: list[discord.app_commands.Command]
+    subgroups: dict[discord.app_commands.Group, 'GroupSub']
+
+type RootTree = dict[Literal["__root__"], GroupSub]
+
+def convert_sub_tree(bot: commands.Bot, /) -> RootTree:
+    """
+    Convert bot's tree to a sub tree
+
+    Args:
+        bot: the bot to read tree
+
+    Returns:
+        the root sub tree
+
+    Note:
+        for command/group which have no parents, their parent will set to str named '__root__'
+    """
+    sub_tree: RootTree = {
+            "__root__": {
+                "subcommands": [],
+                "subgroups": {}
+                }
+            }
+    for cmd in bot.tree.walk_commands(type=discord.AppCommandType.chat_input):
+        current_tree = sub_tree["__root__"]
+        parents: list[discord.app_commands.Group] = []
+
+        temp = cmd.parent
+
+        while temp is not None:
+            parents.append(temp)
+            temp = temp.parent
+
+        for p in reversed(parents):
+            if p not in current_tree["subgroups"]:
+                current_tree["subgroups"][p] = {"subcommands":[], "subgroups":{}}
+            current_tree = current_tree["subgroups"][p]
+
+        if isinstance(cmd, discord.app_commands.Group):
+            if cmd not in current_tree["subgroups"]:
+                current_tree["subgroups"][cmd] = {"subcommands":[], "subgroups":{}}
+        else:
+            if cmd not in current_tree["subcommands"]:
+                current_tree["subcommands"].append(cmd)
+
+    return sub_tree
+
+class JSONGroupSub(TypedDict):
+    subcommands:list[str]
+    subgroups:dict[str, 'JSONGroupSub']
+
+type JSONRootTree = dict[Literal["__root__"], JSONGroupSub]
+
+def jsonify_sub_tree(tree: RootTree, /) -> JSONRootTree:
+    """
+    jsonify the sub tree to jsonified
+
+    Args:
+        tree: the tree to jsonify
+
+    Returns:
+        tree after jsonify
+    """
+    def jsonify(groupsub: GroupSub, /) -> JSONGroupSub:
+        return {
+                "subcommands": [cmd.name for cmd in groupsub["subcommands"]],
+                "subgroups": {group.name: jsonify(sub) for group, sub in groupsub["subgroups"].items()}
+                }
+
+    return {
+            "__root__":jsonify(tree["__root__"])
+            }

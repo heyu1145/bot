@@ -5,7 +5,7 @@ from pathlib import Path
 from discord.ext import commands
 from utils.logger import get_logger
 
-logger, *_= get_logger(__name__)
+logger, *_ = get_logger(__name__)
 
 this_file: str = Path(__file__).name
 default_dir: str = Path(__file__).parent.name
@@ -32,14 +32,14 @@ class CogsFinder:
             if file.name.endswith(".py") and not file.name.startswith("_"):
                 try:
                     await self.bot.load_extension(f"{self.cogs_dir}.{file.stem}")
-                    logger.info("Loaded cog: %s", file.name)
+                    logger.debug("Loaded cog: %s", file.name)
                     successcount += 1
                 except Exception as e:
                     logger.exception("Failed to load cog %s: %s",
                                      file.name, str(e))
                     failcount += 1
-        logger.info(
-            "Finished loading cogs. Success: %i, Failures: %i", 
+        logger.debug(
+            "Finished loading cogs. Success: %i, Failures: %i",
             successcount, failcount)
         return successcount, failcount
 
@@ -53,7 +53,8 @@ class CogsFinder:
         if (not cog_path.exists()
             or not cog_path.name.endswith('.py')
             or cog_path.name.startswith('_')
-            ): return False
+            ):
+            return False
 
         try:
             await self.bot.reload_extension(f"{self.cogs_dir}.{cog_path.stem}")
@@ -76,14 +77,12 @@ class CogsFinder:
             if file.name == this_file:
                 continue
             if await self.reload_cog(file):
+                logger.debug("successfully reloaded cog %s", file.name)
                 successcount += 1
             else:
                 failcount += 1
 
         return successcount, failcount
-
-
-
 
     def listCogs(self) -> list[str]:
         return list(self.bot.cogs.keys())
