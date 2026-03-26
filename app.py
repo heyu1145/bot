@@ -1,12 +1,12 @@
 from flask import Flask, jsonify, render_template_string
 import threading
 import time
-import os
 import logging
 import subprocess
 import sys
 import psutil
 import requests
+from config.config import APP_CONFIG, TIME_CONFIG, API_CONFIG, SYSTEM_CONFIG
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -442,9 +442,9 @@ HTML_TEMPLATE = """
 
 def format_uptime(seconds):
     """Format uptime to human readable format"""
-    days, remainder = divmod(seconds, 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes, seconds = divmod(remainder, 60)
+    days, remainder = divmod(seconds, TIME_CONFIG['UPTIME_DIVISORS']['day_seconds'])
+    hours, remainder = divmod(remainder, TIME_CONFIG['UPTIME_DIVISORS']['hour_seconds'])
+    minutes, seconds = divmod(remainder, TIME_CONFIG['UPTIME_DIVISORS']['minute_seconds'])
     
     if days > 0:
         return f"{days}d {hours}h {minutes}m"
@@ -457,13 +457,13 @@ def get_system_stats():
     """Get comprehensive system statistics"""
     try:
         # CPU usage
-        cpu_percent = psutil.cpu_percent(interval=0.5)  # Faster update
+        cpu_percent = psutil.cpu_percent(interval=SYSTEM_CONFIG['CPU_INTERVAL'])  # Faster update
         cpu_cores = psutil.cpu_count()
         
         # Memory usage
         memory = psutil.virtual_memory()
         memory_percent = memory.percent
-        memory_mb = round(memory.used / (1024 * 1024))
+        memory_mb = round(memory.used / SYSTEM_CONFIG['MEMORY_UNIT'])
         
         # Disk usage
         disk = psutil.disk_usage('/')
@@ -575,7 +575,7 @@ def health():
             "bot": "stopped",
             "timestamp": time.time(),
             "error": "Bot process not running"
-        }), 503
+        }), API_CONFIG['HEALTH_CHECK_STATUS_CODE']
 
 @app.route('/ping')
 def ping():
@@ -664,7 +664,7 @@ def monitor_bot():
             if bot_process and bot_process.poll() is not None:
                 logger.warning("🤖 Bot process stopped, restarting...")
                 start_bot()
-            time.sleep(30)
+            time.sleep(TIME_CONFIG['MONITOR_INTERVAL'])
     
     threading.Thread(target=monitor, daemon=True).start()
 
@@ -673,12 +673,12 @@ def start_ping_service():
     def ping_self():
         while True:
             try:
-                base_url = os.environ.get('RENDER_EXTERNAL_URL', 'http://localhost:10000')
-                response = requests.get(f"{base_url}/ping", timeout=10)
+                base_url = os.environ.get('RENDER_EXTERNAL_URL', f"http://localhost:{APP_CONFIG['PORT']}")
+                response = requests.get(f"{base_url}/ping", timeout=API_CONFIG['DEFAULT_TIMEOUT'])
                 logger.info(f"🔄 Self-ping successful: {response.status_code}")
             except Exception as e:
                 logger.warning(f"⚠️ Self-ping failed: {e}")
-            time.sleep(300)
+            time.sleep(TIME_CONFIG['PING_INTERVAL'])
     
     threading.Thread(target=ping_self, daemon=True).start()
 
@@ -693,13 +693,13 @@ if __name__ == '__main__':
     start_ping_service()
     
     # Start Flask server on Render's assigned port
-    port = int(os.environ.get('PORT', 10000))
+    port = APP_CONFIG['PORT']
     logger.info(f"🌐 Starting web server on port {port}")
     
     # Use Waitress for production if available, else use Flask dev server
     try:
         from waitress import serve
-        serve(app, host='0.0.0.0', port=port, threads=4, _quiet=True)
+        serve(app, host=APP_CONFIG['HOST'], port=port, threads=APP_CONFIG['THREADS'], _quiet=True)
     except ImportError:
         logger.warning("⚠️ Waitress not found, using Flask development server")
-        app.run(host='0.0.0.0', port=port, debug=False)
+        app.run(host=APP_CONFIG['HOST'], port=port, debug=APP_CONFIG['DEBUG'])

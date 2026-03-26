@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 Discord Bot Status Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+    <div class="notification" id="notification"></div>
+    <div class="update-indicator" id="updateIndicator">🔄 Updating...</div>
+
+    <div class="container">
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner"></div>
+        </div>
+
+        <div class="status-icon" id="statusIcon">
+            {{ status_icon }}
+        </div>
+
+        <h1>Discord Bot Dashboard</h1>
+
+        <div class="status-text" id="statusMessage">
+            {{ status_message }}
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card" id="webServerCard">
+                <div class="stat-label">Web Server</div>
+                <div class="stat-value status-online">ONLINE</div>
+                <div class="stat-subvalue">Port: {{ port }}</div>
+            </div>
+
+            <div class="stat-card" id="botProcessCard">
+                <div class="stat-label">Bot Process</div>
+                <div class="stat-value {% if bot_status == 'running' %}status-online{% else %}status-offline{% endif %}" id="botStatusValue">
+                    {{ bot_status.upper() }}
+                </div>
+                <div class="stat-subvalue">PID: <span id="botPid">{{ bot_pid }}</span></div>
+            </div>
+
+            <div class="stat-card" id="uptimeCard">
+                <div class="stat-label">Uptime</div>
+                <div class="stat-value" id="uptimeValue">{{ uptime }}</div>
+                <div class="stat-subvalue">Since: {{ start_time }}</div>
+            </div>
+
+            <div class="stat-card" id="systemCard">
+                <div class="stat-label">System</div>
+                <div class="stat-value" id="cpuUsage">{{ cpu_usage }}% CPU</div>
+                <div class="stat-subvalue"><span id="memoryUsage">{{ memory_usage }}</span>% RAM</div>
+            </div>
+        </div>
+
+        <div class="system-info">
+            <div class="stat-label">System Resources</div>
+            <div class="system-stats">
+                <div class="system-stat">
+                    <div class="system-label">CPU Cores</div>
+                    <div class="system-value" id="cpuCores">{{ cpu_cores }}</div>
+                </div>
+                <div class="system-stat">
+                    <div class="system-label">Memory</div>
+                    <div class="system-value" id="memoryMb">{{ memory_mb }} MB</div>
+                </div>
+                <div class="system-stat">
+                    <div class="system-label">Threads</div>
+                    <div class="system-value" id="threadCount">{{ thread_count }}</div>
+                </div>
+                <div class="system-stat">
+                    <div class="system-label">Disk</div>
+                    <div class="system-value" id="diskUsage">{{ disk_usage }}%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bot-status {% if bot_status == 'running' %}online{% else %}offline{% endif %}" id="botStatus">
+            🤖 Bot is {{ bot_status.upper() }}
+        </div>
+
+        <div class="control-panel">
+            <div class="stat-label" style="margin-bottom: 10px;">Bot Controls</div>
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                <button class="control-btn" onclick="sendBotCommand('start')" id="startBtn" {% if bot_status == 'running' %}disabled{% endif %}>
+                    ▶️ Start Bot
+                </button>
+                <button class="control-btn" onclick="sendBotCommand('stop')" id="stopBtn" {% if bot_status != 'running' %}disabled{% endif %}>
+                    ⏹️ Stop Bot
+                </button>
+                <button class="control-btn" onclick="sendBotCommand('restart')">
+                    🔄 Restart
+                </button>
+                <button class="control-btn" onclick="fetchData()">
+                    📊 Refresh
+                </button>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Powered by Flask & Render • <span id="responseTime">{{ response_time }}</span>ms response</p>
+            <div class="links">
+                <a href="/ping">Ping Test</a>
+                <a href="/bot-status">JSON API</a>
+                <a href="/health">Health Check</a>
+                <a href="/logs">View Logs</a>
+                <a href="#" onclick="toggleAutoUpdate()" id="autoUpdateToggle">⏸️ Pause Updates</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

@@ -3,6 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 import logging
 from utils.permissions import is_trusted_user
+from utils.storage import data_manager
 
 logger = logging.getLogger("Debug")
 

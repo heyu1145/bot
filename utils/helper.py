@@ -1,3 +1,5 @@
+from utils.storage import data_manager
+
 def get_all_commands(bot):
     """Return list of command objects"""
     return list(bot.tree.get_commands())

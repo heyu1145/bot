@@ -4,7 +4,10 @@ class BotException(Exception):
 class TokenException(BotException):
     pass
 
-class TokenNoFoundError(TokenException):
+class TokenNotFoundError(TokenException):
+    pass
+
+class TokenNoFoundError(TokenException):  # Kept for backward compatibility
     pass
 
 class WrongTokenError(TokenException):
@@ -14,5 +17,11 @@ class OwnerUseridException(BotException):
     pass
 
 class OwnerUseridNoFoundError(OwnerUseridException):
+    pass
+
+class BasicFileNotFoundError(BotException):
+    pass
+
+class BotStartFailure(BotException):
     pass
 

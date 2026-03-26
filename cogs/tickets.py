@@ -8,12 +8,13 @@ from typing import Dict, Any, Optional, List
 import asyncio
 import re
 import io
+from config.config import MESSAGE_CONFIG, TICKET_CONFIG
 from utils.storage import (
     load_multi_ticket_configs, save_multi_ticket_configs, get_multi_ticket_setup_by_id,
     load_ticket_configs, save_ticket_configs, get_ticket_setup_by_id,
     load_active_tickets, save_active_ticket, get_ticket_data, remove_active_ticket,
     load_staff_roles, increment_user_ticket_count, reset_user_ticket_count,
-    load_user_ticket_counts, update_ticket_data
+    load_user_ticket_counts, update_ticket_data, data_manager
 )
 from utils.permissions import is_admin_or_owner, has_event_access
 
@@ -119,43 +120,75 @@ class ConfirmCloseView(View):
 
     @discord.ui.button(label="Confirm Close", style=discord.ButtonStyle.danger, emoji="🔒")
     async def confirm_close(self, interaction: discord.Interaction, button: Button):
+        thread = None
         try:
             thread = interaction.guild.get_thread(int(self.thread_id))
-            if thread:
-                # Get ticket data
-                ticket_data = get_ticket_data(self.guild_id, self.thread_id)
-                if not ticket_data:
-                    await interaction.response.send_message("❌ Ticket data not found!", ephemeral=True)
-                    return
- 
-                self.ticket_data['closer_name'] = interaction.user.display_name
-                self.ticket_data['closer_id'] = str(interaction.user.id)
-                self.ticket_data['closed_at'] = datetime.now(timezone.utc).isoformat()
-
-                try:
-                    if 'handle_channel_id' in ticket_data and 'handle_msg_id' in ticket_data:
-                        handle_channel = interaction.guild.get_channel(int(ticket_data['handle_channel_id']))
-                        if handle_channel:
-                            handle_msg = await handle_channel.fetch_message(int(ticket_data['handle_msg_id']))
-                            if handle_msg:
-                                if handle_msg.author.id == interaction.client.user.id:
-                                    await handle_msg.delete()
-                except Exception as e:
-                    print(f"Error when deleting message: {str(e)}")
-                
-                # Create transcript
-                await self.create_transcript(interaction.guild, thread, self.reason, ticket_data)
-                
-                # Remove from active tickets
-                remove_active_ticket(self.guild_id, self.thread_id)
-
-                await thread.edit(archived=True, locked=True)
-                
-                await interaction.followup.send("✅ Ticket closed and archived!", ephemeral=False)
-            else:
+            if not thread:
                 await interaction.followup.send("❌ Ticket not found!", ephemeral=True)
+                return
+
+            # Get ticket data
+            ticket_data = get_ticket_data(self.guild_id, self.thread_id)
+            if not ticket_data:
+                await interaction.followup.send("❌ Ticket data not found!", ephemeral=True)
+                return
+ 
+            self.ticket_data['closer_name'] = interaction.user.display_name
+            self.ticket_data['closer_id'] = str(interaction.user.id)
+            self.ticket_data['closed_at'] = datetime.now(timezone.utc).isoformat()
+
+            # Delete the handle message in the staff channel
+            try:
+                if 'handle_channel_id' in ticket_data and 'handle_msg_id' in ticket_data:
+                    handle_channel = interaction.guild.get_channel(int(ticket_data['handle_channel_id']))
+                    if handle_channel:
+                        handle_msg = await handle_channel.fetch_message(int(ticket_data['handle_msg_id']))
+                        if handle_msg and handle_msg.author.id == interaction.client.user.id:
+                            await handle_msg.delete()
+            except discord.NotFound:
+                # Handle case where message or channel was already deleted
+                print(f"Handle message or channel not found for ticket {self.thread_id}")
+            except Exception as e:
+                print(f"Error when deleting handle message: {str(e)}")
+                
+            # Create transcript before closing the ticket
+            try:
+                await self.create_transcript(interaction.guild, thread, self.reason, ticket_data)
+            except Exception as e:
+                print(f"Error creating transcript: {str(e)}")
+                # Don't fail the entire operation if transcript creation fails
+                
+            # Remove from active tickets
+            try:
+                remove_active_ticket(self.guild_id, self.thread_id)
+            except Exception as e:
+                print(f"Error removing active ticket: {str(e)}")
+                
+            # Archive and lock the thread
+            try:
+                await thread.edit(archived=True, locked=True)
+            except Exception as e:
+                print(f"Error archiving thread: {str(e)}")
+                
+            await interaction.followup.send("✅ Ticket closed and archived!", ephemeral=False)
+            
         except Exception as e:
-            await interaction.followup.send(f"❌ Error closing ticket: {str(e)}", ephemeral=True)
+            print(f"Error in confirm_close: {str(e)}")
+            try:
+                if interaction.response.is_done():
+                    await interaction.followup.send(f"❌ Error closing ticket: {str(e)}", ephemeral=True)
+                else:
+                    await interaction.response.send_message(f"❌ Error closing ticket: {str(e)}", ephemeral=True)
+            except Exception:
+                # If we can't send the error message, log it
+                print(f"Failed to send error message: {str(e)}")
+        finally:
+            # Ensure the view is cleaned up
+            try:
+                if interaction.message:
+                    await interaction.message.edit(view=None)
+            except Exception:
+                pass  # Ignore errors when cleaning up the view
             
     async def create_transcript(self, guild: discord.Guild, thread: discord.Thread, reason: str, ticket_data: dict):
         """Create a transcript of the ticket and send it to the transcripts channel"""
@@ -512,9 +545,9 @@ class MultiTicketSetupView(View):
 # TicketConfigModal class
 class TicketConfigModal(Modal, title="🎫 Configure Ticket Option"):
     button_label = TextInput(label="Button Label", placeholder="e.g., Technical Support", max_length=80, required=True)
-    button_emoji = TextInput(label="Button Emoji (optional)", placeholder="e.g., 🛠️", max_length=10, required=False)
-    title_format = TextInput(label="Ticket Title Format", placeholder="Use {username} or {userid}", default="ticket-{username}", max_length=100, required=True)
-    open_message = TextInput(label="Welcome Message", placeholder="Message shown when ticket is opened", default="Please describe your issue...", style=discord.TextStyle.paragraph, max_length=1000, required=True)
+    button_emoji = TextInput(label="Button Emoji (optional)", placeholder="e.g., 🛠️", max_length=TICKET_CONFIG['MAX_EMOJI_LENGTH'], required=False)
+    title_format = TextInput(label="Ticket Title Format", placeholder="Use {username} or {userid}", default=TICKET_CONFIG['DEFAULT_TITLE_FORMAT'], max_length=TICKET_CONFIG['MAX_TITLE_LENGTH'], required=True)
+    open_message = TextInput(label="Welcome Message", placeholder="Message shown when ticket is opened", default=TICKET_CONFIG['DEFAULT_OPEN_MESSAGE'], style=discord.TextStyle.paragraph, max_length=TICKET_CONFIG['MAX_DESCRIPTION_LENGTH'], required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
         self.config_data = {
@@ -678,7 +711,7 @@ class MultiTicketView(View):
             title = option["title_format"].replace("{username}", interaction.user.name).replace("{userid}", str(user_id))
         
             thread = await interaction.channel.create_thread(
-                name=title[:100],
+                name=title[:MESSAGE_CONFIG['THREAD_NAME_LIMIT']],
                 type=discord.ChannelType.private_thread,
                 invitable=False
             )

@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 from typing import List
 
-from utils.storage import load_trusted_users, save_trusted_users, is_bot_owner
+from utils.storage import load_trusted_users, save_trusted_users, is_bot_owner, data_manager
 from utils.permissions import is_admin_or_owner, has_event_access
 from utils.storage import load_staff_roles, save_staff_roles
 

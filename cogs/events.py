@@ -7,7 +7,8 @@ import re
 from typing import Optional
 import logging
 
-from utils.storage import load_user_timezones, save_user_timezone
+from config.config import MESSAGE_CONFIG
+from utils.storage import load_user_timezones, save_user_timezone, data_manager
 from utils.permissions import has_event_access
 
 logger = logging.getLogger('discord')
@@ -138,11 +139,11 @@ class Events(commands.Cog):
 
             # Create event
             event = await interaction.guild.create_scheduled_event(
-                name=name[:100],
-                description=description[:1000],
+                name=name[:MESSAGE_CONFIG['MAX_TITLE_LENGTH']],
+                description=description[:MESSAGE_CONFIG['MAX_DESCRIPTION_LENGTH']],
                 start_time=utc_start,
                 end_time=utc_end,
-                location=location[:100],
+                location=location[:MESSAGE_CONFIG['MAX_TITLE_LENGTH']],
                 privacy_level=discord.PrivacyLevel.guild_only,
                 entity_type=discord.EntityType.voice if voice_channel else discord.EntityType.external
             )

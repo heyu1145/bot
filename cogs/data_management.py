@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any
 import asyncio
 
+from config.config import MESSAGE_CONFIG
 from utils.storage import (
     load_ticket_configs, load_multi_ticket_configs, load_active_tickets,
     load_user_ticket_counts, load_staff_roles, load_user_timezones,
@@ -15,7 +16,7 @@ from utils.storage import (
     load_all_ticket_configs, load_all_multi_ticket_configs,
     load_all_active_tickets, load_all_user_ticket_counts,
     load_all_staff_roles, load_all_user_timezones,
-    get_all_servers_data
+    get_all_servers_data, data_manager
 )
 from utils.permissions import has_data_access
 
@@ -123,53 +124,91 @@ class DataManagement(commands.Cog):
             if not has_data_access(interaction):
                 return await interaction.response.send_message("❌ Access denied.", ephemeral=True)
             
+            # Enhanced security: Check file extension and content type
             if not json_file.filename.endswith('.json'):
                 return await interaction.response.send_message("❌ Please upload a JSON file!", ephemeral=True)
+            
+            # Check file size (limit to 10MB for security)
+            if json_file.size > 10 * 1024 * 1024:  # 10MB
+                return await interaction.response.send_message("❌ File too large! Maximum 10MB allowed.", ephemeral=True)
             
             await interaction.response.defer(ephemeral=True, thinking=True)
             
             content = await json_file.read()
-            data = json.loads(content.decode('utf-8'))
+            
+            # Additional security: Check for potential code injection
+            content_str = content.decode('utf-8')
+            if any(pattern in content_str for pattern in ['__import__', 'exec', 'eval', 'os.', 'subprocess']):
+                return await interaction.followup.send("❌ Suspicious content detected in JSON file!", ephemeral=True)
+            
+            data = json.loads(content_str)
             guild_id = str(interaction.guild.id)
             
+            # Additional validation for each data type
             if data_type.value == "ticket_configs":
                 if not isinstance(data, list):
                     return await interaction.followup.send("❌ Invalid format for ticket configs! Expected array.", ephemeral=True)
+                # Validate each ticket config item
+                for item in data:
+                    if not isinstance(item, dict) or not all(key in item for key in ['id', 'ticket_channel_id', 'handle_channel_id']):
+                        return await interaction.followup.send("❌ Invalid ticket config format!", ephemeral=True)
                 save_json_data(guild_id, "ticket_configs.json", data)
                 await interaction.followup.send("✅ Ticket configs imported successfully!", ephemeral=True)
             
             elif data_type.value == "multi_ticket_configs":
                 if not isinstance(data, list):
                     return await interaction.followup.send("❌ Invalid format for multi-ticket configs! Expected array.", ephemeral=True)
+                # Validate each multi-ticket config item
+                for item in data:
+                    if not isinstance(item, dict) or 'ticket_options' not in item:
+                        return await interaction.followup.send("❌ Invalid multi-ticket config format!", ephemeral=True)
                 save_json_data(guild_id, "multi_ticket_configs.json", data)
                 await interaction.followup.send("✅ Multi-ticket configs imported successfully!", ephemeral=True)
             
             elif data_type.value == "active_tickets":
                 if not isinstance(data, dict):
                     return await interaction.followup.send("❌ Invalid format for active tickets! Expected object.", ephemeral=True)
+                # Validate ticket data structure
+                for ticket_id, ticket_data in data.items():
+                    if not isinstance(ticket_data, dict) or not isinstance(ticket_id, str):
+                        return await interaction.followup.send("❌ Invalid active tickets format!", ephemeral=True)
                 save_json_data(guild_id, "active_tickets.json", data)
                 await interaction.followup.send("✅ Active tickets imported successfully!", ephemeral=True)
             
             elif data_type.value == "user_ticket_counts":
                 if not isinstance(data, dict):
                     return await interaction.followup.send("❌ Invalid format for user ticket counts! Expected object.", ephemeral=True)
+                # Validate that all keys are strings and values are integers
+                for user_id, count in data.items():
+                    if not isinstance(user_id, str) or not isinstance(count, int):
+                        return await interaction.followup.send("❌ Invalid user ticket counts format!", ephemeral=True)
                 save_json_data(guild_id, "user_ticket_counts.json", data)
                 await interaction.followup.send("✅ User ticket counts imported successfully!", ephemeral=True)
             
             elif data_type.value == "staff_roles":
                 if not isinstance(data, list):
                     return await interaction.followup.send("❌ Invalid format for staff roles! Expected array.", ephemeral=True)
+                # Validate that all items are strings
+                for role_id in data:
+                    if not isinstance(role_id, str):
+                        return await interaction.followup.send("❌ Invalid staff roles format!", ephemeral=True)
                 save_json_data(guild_id, "staff_roles.json", data)
                 await interaction.followup.send("✅ Staff roles imported successfully!", ephemeral=True)
             
             elif data_type.value == "user_timezones":
                 if not isinstance(data, dict):
                     return await interaction.followup.send("❌ Invalid format for user timezones! Expected object.", ephemeral=True)
+                # Validate that all keys are strings and values are strings
+                for user_id, timezone in data.items():
+                    if not isinstance(user_id, str) or not isinstance(timezone, str):
+                        return await interaction.followup.send("❌ Invalid user timezones format!", ephemeral=True)
                 save_json_data(guild_id, "user_timezones.json", data)
                 await interaction.followup.send("✅ User timezones imported successfully!", ephemeral=True)
             
         except json.JSONDecodeError:
             await interaction.followup.send("❌ Invalid JSON file format!", ephemeral=True)
+        except UnicodeDecodeError:
+            await interaction.followup.send("❌ Invalid file encoding! Please use UTF-8.", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"❌ Error importing data: {str(e)}", ephemeral=True)
 

@@ -1,15 +1,15 @@
 import discord
 from discord.ext import commands
-import os
-from dotenv import load_dotenv as lde
 import logging
 import asyncio
 import random
 import time
-from utils.storage import load_trusted_users, is_bot_owner
+from config.config import DISCORD_CONFIG, TIME_CONFIG
+from utils.storage import load_trusted_users, is_bot_owner, data_manager
 from utils.permissions import has_data_access
 from customerror import *
-from utils.ref import create_refresh_task
+from utils.auto_refresh import create_refresh_task
+from utils.cog_loader import CogLoader
 
 # Setup logging - KEPT AS IS
 logging.basicConfig(level=logging.INFO)
@@ -17,15 +17,13 @@ logger = logging.getLogger('discord')
 logger.setLevel(logging.INFO)
 logger.propagate = True
 
-# Load environment variables - KEPT AS IS
-if not lde():
-  logger.warning(".env file no found! trying get environment")
-TOKEN = os.getenv('TOKEN')
-OWNER_USER_ID = os.getenv('OWNER_USER_ID')
+# Load environment variables and validate configs - KEPT AS IS
+TOKEN = DISCORD_CONFIG['TOKEN']
+OWNER_USER_ID = DISCORD_CONFIG['OWNER_USER_ID']
 
 if not TOKEN:
     logger.error("❌ ERROR: No Discord token found! Set TOKEN in environment variables")
-    raise TokenNoFoundError("Didnt found token in environment!")
+    raise TokenNotFoundError("Didnt found token in environment!")
 
 if not OWNER_USER_ID:
     logger.error("❌ ERROR: No owner user ID found! Set OWNER_USER_ID in environment variables")
@@ -33,22 +31,19 @@ if not OWNER_USER_ID:
 
 # Bot setup - KEPT AS IS
 intents = discord.Intents.default()
-intents.message_content = True
-intents.guilds = True
-intents.guild_scheduled_events = True
-intents.members = True
-intents.messages = True
+for intent_name, intent_value in DISCORD_CONFIG['INTENTS'].items():
+    setattr(intents, intent_name, intent_value)
 
-bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
+bot = commands.Bot(command_prefix=DISCORD_CONFIG['COMMAND_PREFIX'], intents=intents, help_command=None)
 bot.start_time = time.time()
 refresh_task = create_refresh_task(bot)
 
 # Uptime function - ADDED
 def get_uptime():
     uptime_seconds = int(time.time() - bot.start_time)
-    days, remainder = divmod(uptime_seconds, 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes, seconds = divmod(remainder, 60)
+    days, remainder = divmod(uptime_seconds, TIME_CONFIG['UPTIME_DIVISORS']['day_seconds'])
+    hours, remainder = divmod(remainder, TIME_CONFIG['UPTIME_DIVISORS']['hour_seconds'])
+    minutes, seconds = divmod(remainder, TIME_CONFIG['UPTIME_DIVISORS']['minute_seconds'])
     
     if days > 0:
         return f"{days}d {hours}h {minutes}m"
@@ -57,19 +52,24 @@ def get_uptime():
     else:
         return f"{minutes}m {seconds}s"
 
-# Load cogs - KEPT AS IS
+# Load cogs - UPDATED to use automatic loading
 async def load_cogs():
     try:
-        await bot.load_extension('cogs.tickets')
-        await bot.load_extension('cogs.events')
-        await bot.load_extension('cogs.data_management')
-        await bot.load_extension('cogs.admin')
-        await bot.load_extension('cogs.helper')
-        await bot.load_extension('cogs.debug')
-        await bot.load_extension('cogs.test')
-        logger.info("✅ All cogs loaded successfully")
+        # 使用CogLoader自动加载所有cogs
+        cog_loader = CogLoader(bot, 'cogs')
+        load_result = await cog_loader.load_all_cogs()
+        
+        total_loaded = load_result['total_loaded']
+        total_failed = load_result['total_failed']
+        
+        if total_loaded > 0:
+            logger.info(f"✅ Successfully loaded {total_loaded} cogs")
+        if total_failed > 0:
+            logger.error(f"❌ {total_failed} cogs failed to load")
+            for failed in load_result['failed']:
+                logger.error(f"   - {failed['cog']}: {failed['error']}")
     except Exception as e:
-        logger.error(f"❌ Failed to load cogs: {e}")
+        logger.error(f"❌ Error loading cogs automatically: {e}")
 
 @bot.event
 async def on_ready():
