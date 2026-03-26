@@ -4,7 +4,7 @@ from discord.ext import commands
 import json
 import os
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Dict, Any
 import asyncio
 
 from utils.storage import (
@@ -60,28 +60,28 @@ class DataManagement(commands.Cog):
                 files.append(discord.File(filename))
             
             if data_type.value == "all" or data_type.value == "active_tickets":
-                data = load_active_tickets(guild_id)
+                data:Dict[str, Any] = load_active_tickets(guild_id)
                 filename = f"active_tickets_{timestamp}.json"
                 with open(filename, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
                 files.append(discord.File(filename))
             
             if data_type.value == "all" or data_type.value == "user_ticket_counts":
-                data = load_user_ticket_counts(guild_id)
+                data:Dict[str, int] = load_user_ticket_counts(guild_id)
                 filename = f"user_ticket_counts_{timestamp}.json"
                 with open(filename, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
                 files.append(discord.File(filename))
             
             if data_type.value == "all" or data_type.value == "staff_roles":
-                data = load_staff_roles(guild_id)
+                data:List[str] = load_staff_roles(guild_id)
                 filename = f"staff_roles_{timestamp}.json"
                 with open(filename, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)
                 files.append(discord.File(filename))
             
             if data_type.value == "all" or data_type.value == "user_timezones":
-                data = load_user_timezones(guild_id)
+                data:Dict[str, str] = load_user_timezones(guild_id)
                 filename = f"user_timezones_{timestamp}.json"
                 with open(filename, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2, ensure_ascii=False)

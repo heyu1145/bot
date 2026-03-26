@@ -160,8 +160,8 @@ class Admin(commands.Cog):
         image_url="Image URL (optional)"
     )
     async def send_embed(self, interaction: discord.Interaction, channel: discord.TextChannel, 
-                        message: str, title: str = None, color: str = "0000FF", 
-                        footer: str = None, image_url: str = None):
+                        message: str, title: str | None = None, color: str = "0000FF", 
+                        footer: str | None = None, image_url: str | None = None):
         if not interaction.guild:
             return await interaction.response.send_message("❌ Server only command!", ephemeral=True)
         if not has_event_access(interaction):

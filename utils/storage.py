@@ -339,7 +339,7 @@ def load_all_user_timezones() -> Dict[str, Dict[str, str]]:
 
 # ==================== GLOBAL EXPORT/IMPORT ====================
 
-def export_all_server_data() -> Dict[str, Dict[str, Any]]:
+def export_all_server_data() -> Dict[str, Dict[str, Any] | Any]:
     """Export all data from all servers"""
     return {
         "ticket_configs": load_all_ticket_configs(),
