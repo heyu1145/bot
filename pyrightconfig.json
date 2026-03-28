@@ -1,0 +1,6 @@
+{
+    "reportMissingTypeStubs": true,
+    "reportUndefinedVariable": "error",
+    "reportUnnecessaryTypeIgnoreComment": "information",
+    "reportUnnecessaryCast": "information",
+}

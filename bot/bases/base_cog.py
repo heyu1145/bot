@@ -1,6 +1,7 @@
 """
 base of a cog
 """
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -16,7 +17,9 @@ class BaseCog(commands.Cog):
     async def cog_unload(self) -> None:
         return await super().cog_unload()
 
-    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError) -> None:
+    async def cog_app_command_error(
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ) -> None:
         return await super().cog_app_command_error(interaction, error)
 
 

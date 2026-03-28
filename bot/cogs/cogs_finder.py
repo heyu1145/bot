@@ -1,6 +1,7 @@
 """
 Load cogs from user imported dir ( default this Dir )
 """
+
 from pathlib import Path
 from discord.ext import commands
 from utils.logger import get_logger
@@ -8,7 +9,7 @@ from utils.logger import get_logger
 logger, *_ = get_logger(__name__)
 
 this_file: str = Path(__file__).name
-default_dir: str = Path(__file__).parent.name
+default_dir: Path = Path(__file__).parent
 
 
 class CogsFinder:
@@ -31,16 +32,15 @@ class CogsFinder:
                 continue
             if file.name.endswith(".py") and not file.name.startswith("_"):
                 try:
-                    await self.bot.load_extension(f"{self.cogs_dir}.{file.stem}")
+                    await self.bot.load_extension(f"{self.cogs_dir.name}.{file.stem}")
                     logger.debug("Loaded cog: %s", file.name)
                     successcount += 1
                 except Exception as e:
-                    logger.exception("Failed to load cog %s: %s",
-                                     file.name, str(e))
+                    logger.exception("Failed to load cog %s: %s", file.name, str(e))
                     failcount += 1
         logger.debug(
-            "Finished loading cogs. Success: %i, Failures: %i",
-            successcount, failcount)
+            "Finished loading cogs. Success: %i, Failures: %i", successcount, failcount
+        )
         return successcount, failcount
 
     async def reload_cog(self, name: str | Path) -> bool:
@@ -50,10 +50,11 @@ class CogsFinder:
             Successful or not
         """
         cog_path = self.cogs_dir / name
-        if (not cog_path.exists()
-            or not cog_path.name.endswith('.py')
-            or cog_path.name.startswith('_')
-            ):
+        if (
+            not cog_path.exists()
+            or not cog_path.name.endswith(".py")
+            or cog_path.name.startswith("_")
+        ):
             return False
 
         try:
@@ -84,5 +85,5 @@ class CogsFinder:
 
         return successcount, failcount
 
-    def listCogs(self) -> list[str]:
+    def list_cogs(self) -> list[str]:
         return list(self.bot.cogs.keys())

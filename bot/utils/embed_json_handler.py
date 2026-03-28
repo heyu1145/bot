@@ -1,7 +1,8 @@
 """
 the embed json format checker
 """
-from typing import overload
+
+from copy import deepcopy
 import discord
 from utils.hex_helper import to_color_int
 from utils.utils import human_like_join
@@ -12,52 +13,14 @@ CORE_CONTENT: list[str] = [
     "footer",
     "author",
     "image",
-    "thumbnail"
+    "thumbnail",
 ]
 
-EMPTY_THING: list = [
-    "",
-    None
-]
+EMPTY_THING: list = ["", None]
 
-ERREMBED_FORMAT = discord.Embed(
-    title="Failed",
-    color=discord.Color.red()
-)
+ERREMBED_FORMAT = discord.Embed(title="Failed", color=discord.Color.red())
 
-SUCCESSEMBED_FORMAT = discord.Embed(
-    title="success",
-    color=discord.Color.green()
-)
-
-
-@overload
-def deepcopy(data: dict, /) -> dict:
-    ...
-
-
-@overload
-def deepcopy(data: list, /) -> list:
-    ...
-
-
-def deepcopy(data: dict | list, /) -> dict | list:
-    if isinstance(data, dict):
-        result = {}
-        for key, value in data.items():
-            if isinstance(value, dict | list):
-                result[key] = deepcopy(value)
-            else:
-                result[key] = value
-        return result
-    else:
-        result = []
-        for value in data:
-            if isinstance(value, dict | list):
-                result.append(deepcopy(value))
-            else:
-                result.append(value)
-        return result
+SUCCESSEMBED_FORMAT = discord.Embed(title="success", color=discord.Color.green())
 
 
 def has_core_content(data: dict) -> bool:
@@ -71,7 +34,7 @@ def has_core_content(data: dict) -> bool:
         True if has any content,
         False if not any
     """
-    return any([core in data and data[core] not in EMPTY_THING for core in CORE_CONTENT])
+    return any(core in data and data[core] not in EMPTY_THING for core in CORE_CONTENT)
 
 
 def convent_color_to_vaild(data: dict) -> tuple[bool, dict | None]:
@@ -122,7 +85,9 @@ def convent_embed_json(data: object) -> tuple[bool, dict | None, discord.Embed]:
     ok = has_core_content(data)
     if not ok:
         errembed = ERREMBED_FORMAT.copy()
-        errembed.description = f"The embed dont have any core content: {human_like_join(CORE_CONTENT)}"
+        errembed.description = (
+            f"The embed dont have any core content:{human_like_join(CORE_CONTENT)}"
+        )
         return False, None, errembed
 
     warning_data: list[str] = []
@@ -137,7 +102,8 @@ def convent_embed_json(data: object) -> tuple[bool, dict | None, discord.Embed]:
             return False, None, errembed
 
         warning_data.append(
-            f"The color data is wrong but resolved, color now: {newdata.get('color')}")
+            f"The color data is wrong but resolved, color now: {newdata.get('color')}"
+        )
 
     sucembed = SUCCESSEMBED_FORMAT.copy()
 
@@ -145,9 +111,9 @@ def convent_embed_json(data: object) -> tuple[bool, dict | None, discord.Embed]:
 
     success = True
 
-    if len(warning_data):
+    if warning_data:
         success = False
-        for data in warning_data:
-            sucembed.add_field(name="warning", value=data, inline=False)
+        for warns in warning_data:
+            sucembed.add_field(name="warning", value=warns, inline=False)
 
     return success, newdata, sucembed

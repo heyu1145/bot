@@ -1,60 +1,41 @@
 """
 an utils function include all unknown type func
 """
+
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Literal, Protocol, TypedDict, cast, overload
+from typing import Literal, Protocol, TypedDict, cast
 import inspect
 import discord
 from discord.ext import commands
 
-@overload
-async def maybe_coro[T](
-        func: Callable[..., T],
-        /,
-        *args,
-        **kwargs
-    ) -> T: ...
 
-@overload
-async def maybe_coro[T](
-        func: Callable[..., Awaitable[T]],
-        /,
-        *args,
-        **kwargs
-    ) -> T: ...
-
-async def maybe_coro[T](
-    func: Callable[..., T | Awaitable[T]],
-    /,
-    *args,
-    **kwargs
-) -> T:
+async def maybe_coro[T](func: Callable[..., T | Awaitable[T]], /, *args, **kwargs) -> T:
     """
-    Call a function that not Corountine or await it
+    call either sync or async function
 
     Args:
-        func: A Callable, Whether Corountine or not
-        Args & Kwargs: Pass to func
-    
-    Tips:
-        This function wouldn't handle sync function returns corountine
-        Or async function returns more than two corountres
+        func: the function to call
+        args: the args pass to func
+        kwargs: the kwargs pass to func
 
     Returns:
-        func's returns
+        func after call
+
+    Note:
+        this function won't catch any errors
     """
     if inspect.iscoroutinefunction(func):
         return await func(*args, **kwargs)
 
     return cast(T, func(*args, **kwargs))
 
+
 class ToStringAble(Protocol):
     """
     class include __str__ (can str())
     """
 
-    def __str__(self) -> str:
-        ...
+    def __str__(self) -> str: ...
 
 
 class ToReprAble(Protocol):
@@ -62,18 +43,14 @@ class ToReprAble(Protocol):
     class include __repr__ (can repr())
     """
 
-    def __repr__(self) -> str:
-        ...
+    def __repr__(self) -> str: ...
 
 
 type StringLike = ToStringAble | ToReprAble
 
 
 def human_like_join(
-    seq: Sequence[StringLike],
-    *,
-    delimiter: str = ", ",
-    final: str = " or "
+    seq: Sequence[StringLike], *, delimiter: str = ", ", final: str = " or "
 ) -> str:
     """
     convert a Sequence (sized and iterable) to the human string
@@ -105,10 +82,11 @@ def human_like_join(
 
 
 def multi_set_fields(
-        embed: discord.Embed,
-        all_inline: bool = True,
-        title_all_name: bool = True,
-        **kwargs: object
+    embed: discord.Embed,
+    all_inline: bool = True,
+    replace_underscore: bool = True,
+    title_all_name: bool = True,
+    **kwargs: StringLike,
 ) -> discord.Embed:
     """
     add fields multiply
@@ -129,20 +107,23 @@ def multi_set_fields(
         raise ValueError("you can only add 25 fields in one embed!")
 
     for name, value in kwargs.items():
-        replaced = name.replace("_", " ")
+        replaced = name.replace("_", " ") if replace_underscore else name
         embed.add_field(
             name=replaced.title() if title_all_name else replaced,
             value=value,
-            inline=all_inline
+            inline=all_inline,
         )
 
     return embed
 
+
 class GroupSub(TypedDict):
     subcommands: list[discord.app_commands.Command]
-    subgroups: dict[discord.app_commands.Group, 'GroupSub']
+    subgroups: dict[discord.app_commands.Group, "GroupSub"]
+
 
 type RootTree = dict[Literal["__root__"], GroupSub]
+
 
 def convert_sub_tree(bot: commands.Bot, /) -> RootTree:
     """
@@ -157,12 +138,7 @@ def convert_sub_tree(bot: commands.Bot, /) -> RootTree:
     Note:
         for command/group which have no parents, their parent will set to str named '__root__'
     """
-    sub_tree: RootTree = {
-            "__root__": {
-                "subcommands": [],
-                "subgroups": {}
-                }
-            }
+    sub_tree: RootTree = {"__root__": {"subcommands": [], "subgroups": {}}}
     for cmd in bot.tree.walk_commands(type=discord.AppCommandType.chat_input):
         current_tree = sub_tree["__root__"]
         parents: list[discord.app_commands.Group] = []
@@ -175,23 +151,26 @@ def convert_sub_tree(bot: commands.Bot, /) -> RootTree:
 
         for p in reversed(parents):
             if p not in current_tree["subgroups"]:
-                current_tree["subgroups"][p] = {"subcommands":[], "subgroups":{}}
+                current_tree["subgroups"][p] = {"subcommands": [], "subgroups": {}}
             current_tree = current_tree["subgroups"][p]
 
         if isinstance(cmd, discord.app_commands.Group):
             if cmd not in current_tree["subgroups"]:
-                current_tree["subgroups"][cmd] = {"subcommands":[], "subgroups":{}}
+                current_tree["subgroups"][cmd] = {"subcommands": [], "subgroups": {}}
         else:
             if cmd not in current_tree["subcommands"]:
                 current_tree["subcommands"].append(cmd)
 
     return sub_tree
 
+
 class JSONGroupSub(TypedDict):
-    subcommands:list[str]
-    subgroups:dict[str, 'JSONGroupSub']
+    subcommands: list[str]
+    subgroups: dict[str, "JSONGroupSub"]
+
 
 type JSONRootTree = dict[Literal["__root__"], JSONGroupSub]
+
 
 def jsonify_sub_tree(tree: RootTree, /) -> JSONRootTree:
     """
@@ -203,12 +182,13 @@ def jsonify_sub_tree(tree: RootTree, /) -> JSONRootTree:
     Returns:
         tree after jsonify
     """
+
     def jsonify(groupsub: GroupSub, /) -> JSONGroupSub:
         return {
-                "subcommands": [cmd.name for cmd in groupsub["subcommands"]],
-                "subgroups": {group.name: jsonify(sub) for group, sub in groupsub["subgroups"].items()}
-                }
+            "subcommands": [cmd.name for cmd in groupsub["subcommands"]],
+            "subgroups": {
+                group.name: jsonify(sub) for group, sub in groupsub["subgroups"].items()
+            },
+        }
 
-    return {
-            "__root__":jsonify(tree["__root__"])
-            }
+    return {"__root__": jsonify(tree["__root__"])}

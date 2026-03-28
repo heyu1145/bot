@@ -1,5 +1,5 @@
-import { ref, computed } from 'vue'
-import { defineStore } from 'pinia'
+import {ref, computed} from 'vue'
+import {defineStore} from 'pinia'
 
 interface BotStatus {
   bot_status: string
@@ -70,19 +70,19 @@ export const useBotStore = defineStore('bot', () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: command })
+        body: JSON.stringify({message: command})
       })
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
-      
+
       const result = await response.json()
-      return { success: true, data: result }
+      return {success: true, data: result}
     } catch (err) {
-      return { 
-        success: false, 
-        error: err instanceof Error ? err.message : 'Failed to send command' 
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to send command'
       }
     }
   }
@@ -90,29 +90,28 @@ export const useBotStore = defineStore('bot', () => {
   async function ping() {
     pinging.value = true
     error.value = null
-    const startTime = Date.now() // 记录请求开始时间
-    
+
     try {
       const response = await fetch('/api/ping')
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
       const data = await response.json()
-      
+
       // 计算response time：当前时间 - 后端timestamp（转换为毫秒）
       const backendTime = data.timestamp * 1000 // 后端返回的是秒，转换为毫秒
       const responseTime = Date.now() - backendTime
-      
+
       pingResult.value = {
         ...data,
         responseTime: Math.max(0, responseTime) // 确保非负数
       }
-      
-      return { success: true, data: pingResult.value }
+
+      return {success: true, data: pingResult.value}
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to ping backend'
       console.error('Error pinging backend:', err)
-      return { success: false, error: error.value }
+      return {success: false, error: error.value}
     } finally {
       pinging.value = false
     }

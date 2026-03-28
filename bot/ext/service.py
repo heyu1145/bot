@@ -1,6 +1,7 @@
 """
 run a http service at localhost:4100/api for frontend localhost:3000
 """
+
 from datetime import datetime, timezone
 from random import randint
 from time import sleep
@@ -20,7 +21,7 @@ LANGUAGE_HINTS: dict[str, str] = {
     "lua": "everything is a table, even list or dict",
     "go": "did you err != nil?",
     "html": '<div id="meme">hello world!</div>',
-    "css": 'div#meme {\nbackground-color: rgb(255,136,0);\n}',
+    "css": "div#meme {\nbackground-color: rgb(255,136,0);\n}",
     "java": "Write once, run anywhere... if you're lucky",
     "kotlin": "Null safety is a feature, not a bug",
     "swift": "Objective-C, but modern and safer",
@@ -68,15 +69,16 @@ async def response_ping(request: Request):
         "reply": "pong!",
         "timestamp": now,
         "client_host": request.client.host if request.client else "unknown",
-        "random_bytes": token_urlsafe(8)
+        "random_bytes": token_urlsafe(16),
     }
 
 
 @app.post("/bot-control", response_model=MessageResponse)
-async def handle_message(request: MessageRequest) -> MessageResponse :
+async def handle_message(request: MessageRequest) -> MessageResponse:
     # temp message, will edit after all complete
     reply = f"Received your message: {request.message}"
     return MessageResponse(reply=reply)
+
 
 # post to /status for frontend data: disk, memory, cpu usage, thread count, bot latency
 
@@ -106,13 +108,14 @@ async def get_status():
 
     status = {
         "bot_status": "running",  # placeholder, edit after full access
-        "disk_usage": psutil.disk_usage('/')._asdict(),
+        "disk_usage": psutil.disk_usage("/")._asdict(),
         "memory_usage": psutil.virtual_memory()._asdict(),
         "cpu_usage": cpu_usage,
         "thread_count": psutil.Process().num_threads(),
-        "bot_latency_ms": randint(100, 1000)   # Placeholder value
+        "bot_latency_ms": randint(100, 1000),  # Placeholder value
     }
     return status
+
 
 # special method
 
@@ -130,7 +133,7 @@ async def teapot(request: Request):
         JSONResponse: A 418 response with request information and easter eggs
     """
     if not request.client:
-        return RedirectResponse('/', 303)
+        return RedirectResponse("/", 303)
 
     try:
         body = await request.body()
@@ -170,8 +173,8 @@ async def teapot(request: Request):
             "content_type": content_type,
             "first_100_characters": _safe_decode_body(body)[:100]
             if body
-            else "empty body"
-        }
+            else "empty body",
+        },
     }
 
     # Check for programming language hints in content-type
@@ -210,19 +213,21 @@ def _safe_decode_body(body: bytes, max_size: int = 3 * 1024 * 1024) -> str:
     if len(body) > max_size:
         return "body too large to decode"
     try:
-        return body.decode('utf-8', 'ignore')
+        return body.decode("utf-8", "ignore")
     except Exception:
         return "failed to decode body"
 
 
-@app.get('/')
+@app.get("/")
 async def root():
-    return JSONResponse({
-        "message": "Welcome to teapot"
-    }, 203, {"Teapot": "hello world!"})
+    return JSONResponse(
+        {"message": "Welcome to teapot"}, 203, {"Teapot": "hello world!"}
+    )
+
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="localhost", port=4100)
 
 # To run the service, execute this file directly.

@@ -1,6 +1,7 @@
 """
 logger dispatcher
 """
+
 from typing import overload
 import logging
 from datetime import datetime
@@ -12,30 +13,19 @@ file_prefix = datetime.now().isoformat()
 
 @overload
 def get_logger(
-    value: str,
-    logging_dir: Path = this_file.parent.parent / "logs"
-) -> tuple[logging.Logger, logging.StreamHandler, logging.FileHandler]:
-    """
-    an function returns a logger by name
-    """
-    ...
+    value: str, logging_dir: Path = this_file.parent.parent / "logs"
+) -> tuple[logging.Logger, logging.StreamHandler, logging.FileHandler]: ...
 
 
 @overload
-def get_logger(
-    value: logging.Logger,
-    logging_dir: Path = this_file.parent.parent / "logs"
-) -> tuple[logging.Logger, logging.StreamHandler, logging.FileHandler]:
-    """
-    an empty logger pack for log
-    """
-    ...
+def get_logger[T: logging.Logger](
+    value: T, logging_dir: Path = this_file.parent.parent / "logs"
+) -> tuple[T, logging.StreamHandler, logging.FileHandler]: ...
 
 
-def get_logger(
-        value: object,
-        logging_dir=this_file.parent.parent / "logs"
-):
+def get_logger[T: logging.Logger](
+    value: str | T, logging_dir=this_file.parent.parent / "logs"
+) -> tuple[logging.Logger | T, logging.StreamHandler, logging.FileHandler]:
     """Get a configured logger instance."""
     logger: logging.Logger = logging.getLogger(str(value))
     if isinstance(value, logging.Logger):
@@ -48,7 +38,8 @@ def get_logger(
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
     formatter = logging.Formatter(
-        '( %(name)s ) - %(asctime)s - %(levelname)s: %(message)s')
+        "( %(name)s ) - %(asctime)s - %(levelname)s: %(message)s"
+    )
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 

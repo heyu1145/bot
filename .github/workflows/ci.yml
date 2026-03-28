@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, feature-* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  static_test:
+    strategy:
+      matrix:
+        os-version: [ ubuntu-latest, macos-latest, windows-latest ]
+        python-version: [ 3.12, 3.13, 3.14 ]
+      fail-fast: false
+
+    runs-on: ${{ matrix.os-version }}
+
+    steps:
+      - name: checkout the code
+        uses: actions/checkout@v4
+
+      - name: setup python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: install dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: run pyright test
+        run: uv run pyright .
+
+      - name: run mypy test
+        id: mypy
+        run: uv run mypy . --exclude-gitignore --disable-error-code import-untyped
+
+      - name: run pytest test
+        run: uv run pytest . -q --cov --cov-fail-under 75 --cov-report=markdown --cov-report=term-missing
+
+      - name: upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os-version }}-${{ matrix.python-version }}
+          path: coverage.md
+
+  merge_result:
+    runs-on: ubuntu-latest
+    needs: static_test
+    if: success()
+
+    steps:
+      - name: download artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: all-coverage
+
+      - name: pack the result
+        run: zip -r coverage-reports.zip all-coverage/
+
+      - name: upload to artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: coverage-reports.zip
