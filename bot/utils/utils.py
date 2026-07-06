@@ -3,10 +3,28 @@ an utils function include all unknown type func
 """
 
 from collections.abc import Awaitable, Callable, Sequence
+from types import FrameType
 from typing import Literal, Protocol, TypedDict, cast
 import inspect
 import discord
 from discord.ext import commands
+
+__all__ = (
+    "maybe_coro",
+    "ToStringAble",
+    "ToReprAble",
+    "StringLike",
+    "human_like_join",
+    "multi_set_fields",
+    "frame_get_parents",
+    "frame_back_n",
+    "GroupSub",
+    "RootTree",
+    "convert_sub_tree",
+    "JSONGroupSub",
+    "JSONRootTree",
+    "jsonify_sub_tree",
+)
 
 
 async def maybe_coro[T](func: Callable[..., T | Awaitable[T]], /, *args, **kwargs) -> T:
@@ -117,6 +135,44 @@ def multi_set_fields(
     return embed
 
 
+def frame_get_parents(frame: FrameType, /) -> list[FrameType]:
+    """
+    return the frame list from root -> current frame
+
+    Args:
+        frame: current frame
+
+    Returns:
+        list of all frame
+    """
+    temp_list: list[FrameType] = [frame]
+
+    temp = frame.f_back
+
+    while temp:
+        temp_list.append(temp)
+        temp = temp.f_back
+
+    return temp_list[::-1]
+
+
+def frame_back_n(frame: FrameType, count: int = 3, /) -> tuple[bool, int, FrameType]:
+    """
+    try to get current Frame count back parents
+
+    Args:
+        frame: current frame
+        count: the count to get
+
+    Returns:
+        tuple of (success, actually count, frame)
+    """
+    parent_list = frame_get_parents(frame)[::-1]
+    index = min(len(parent_list) - 1, count - 1)
+
+    return (index == count - 1, index, parent_list[index])
+
+
 class GroupSub(TypedDict):
     subcommands: list[discord.app_commands.Command]
     subgroups: dict[discord.app_commands.Group, "GroupSub"]
@@ -151,12 +207,14 @@ def convert_sub_tree(bot: commands.Bot, /) -> RootTree:
 
         for p in reversed(parents):
             if p not in current_tree["subgroups"]:
-                current_tree["subgroups"][p] = {"subcommands": [], "subgroups": {}}
+                current_tree["subgroups"][p] = {
+                    "subcommands": [], "subgroups": {}}
             current_tree = current_tree["subgroups"][p]
 
         if isinstance(cmd, discord.app_commands.Group):
             if cmd not in current_tree["subgroups"]:
-                current_tree["subgroups"][cmd] = {"subcommands": [], "subgroups": {}}
+                current_tree["subgroups"][cmd] = {
+                    "subcommands": [], "subgroups": {}}
         else:
             if cmd not in current_tree["subcommands"]:
                 current_tree["subcommands"].append(cmd)

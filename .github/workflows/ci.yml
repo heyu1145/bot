@@ -38,12 +38,18 @@ jobs:
 
       - name: run mypy test
         id: mypy
-        run: uv run mypy . --exclude-gitignore --disable-error-code import-untyped
+        run: uv run mypy . --exclude-gitignore --disable-error-code import-untyped --linecount-report .
+
+      - name: upload mypy result
+        uses: actions/upload-artifact@v4
+        with:
+          name: linecount-report-${{ matrix.os-version }}-${{ matrix.python-version }}
+          path: linecount.txt
 
       - name: run pytest test
-        run: uv run pytest . -q --cov --cov-fail-under 75 --cov-report=markdown --cov-report=term-missing
+        run: uv run pytest . -q --cov --cov-fail-under 80 --cov-report=markdown --cov-report=term-missing
 
-      - name: upload result
+      - name: upload pytest result
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ matrix.os-version }}-${{ matrix.python-version }}
@@ -58,13 +64,19 @@ jobs:
       - name: download artifact
         uses: actions/download-artifact@v4
         with:
-          path: all-coverage
+          path: all-reports
 
-      - name: pack the result
-        run: zip -r coverage-reports.zip all-coverage/
+      - name: make new dir
+        run: mkdir report-zips
+
+      - name: pack the result (mypy)
+        run: zip -r report-zips/mypy-reports.zip all-reports/linecount-*
+
+      - name: pack the result (pytest)
+        run: zip -r report-zips/coverage-reports.zip all-reports/coverage-*
 
       - name: upload to artifact
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-reports
-          path: coverage-reports.zip
+          name: reports
+          path: report-zips/

@@ -5,6 +5,9 @@ discord attachment convent helper
 from discord import Attachment, File
 import discord
 
+__all__ = ("convent_attachment_to_url",
+           "check_attachment_is_image", "convent_attachment_to_file")
+
 
 def convent_attachment_to_url(attachment: Attachment) -> str:
     """

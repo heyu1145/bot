@@ -8,7 +8,28 @@ from datetime import datetime
 from pathlib import Path
 
 this_file = Path(__file__).resolve()
-file_prefix = datetime.now().isoformat()
+now = datetime.now().astimezone()
+file_prefix = now.isoformat(timespec="seconds")
+
+__all__ = ("get_logger",)
+
+PS1_COLORS: dict[str, str] = {
+    "black": "\033[30m",
+    "red": "\033[31m",
+    "green": "\033[32m",
+    "yellow": "\033[33m",
+    "blue": "\033[34m",
+    "cyan": "\033[36m",
+    "white": "\033[37m",
+    "reset": "\033[0m",
+}
+
+FORMAT: str = (f"{PS1_COLORS['blue']}%(asctime)s{PS1_COLORS['reset']} - "
+               f"{PS1_COLORS['green']}%(name)s{PS1_COLORS['reset']} - "
+               f"{PS1_COLORS['yellow']}%(levelname)s{PS1_COLORS['reset']}"
+               " - %(message)s")
+
+DATE_FORMAT: str = "%Y-%m-%d %H:%M:%S"
 
 
 @overload
@@ -37,9 +58,7 @@ def get_logger[T: logging.Logger](
     logger.setLevel(logging.DEBUG)
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
-    formatter = logging.Formatter(
-        "( %(name)s ) - %(asctime)s - %(levelname)s: %(message)s"
-    )
+    formatter = logging.Formatter(fmt=FORMAT, datefmt=DATE_FORMAT)
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 

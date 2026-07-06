@@ -10,17 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.0-rc.1] - 2026.??.??
 
 ### Added
-- Cross-module transmission: The new util `utils/pub_sub_manager.py` with an channel, baseChannel and Manager for Cross-Module transaction
 - Documentation: Created the `docs/` in both frontend and backend and necessary documents will go there for better finding
+- All log file after `7 days` and `__pycache__` will be marked as unused cache and removed after runing `cleanup_unused_cache.py`
+- The bot now will have an activity randomly, you can freely edit it at `bot_tasks.py`
+- Created a new file `utils/parse_changelog.py` for parsing versions in changelogs
+- Created new Commands `/send` and `/event` supports you do some activity as bot
+- You can now check bots changelog by `/changelog` command
+- You can config cogs status (`attach` or `deattach`) by `/config_cog` command
+- Add some common checks in `checks.py`
 
 ### Changed
 - Both Frontend and Backend Splited for debugging and building
 - Frontend Change: Modifyed whole the Front Frame for better viewing.
 - Backend Change: Added some Special Routes
 - The logger from `utils/logger.py` will automatic log all levels to a file at `logs/`
+- The `utils/cog_loader.py` moved to `cogs/cog_loader.py` and upgrade for better handling
+- Added auto reload cogs and load new cogs in dir `cogs`, content in `bot_tasks.py`
 
 ### Fixed
-- The `utils/cog_loader.py` moved to `cogs/cog_loader.py` and upgrade for better handling
+- Cogs Error will be handled when cog raised a error while action
 
 ## [1.1.0] - 2025-10-08
 

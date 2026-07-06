@@ -4,6 +4,15 @@ hex helper functions
 
 VALID_HEX_STRING_SET = frozenset("0123456789abcdefABCDEF")
 
+__all__ = (
+    "normalize_string",
+    "handle_short_string",
+    "normalize_hex_color",
+    "to_color_int",
+    "split_rgb",
+    "rgba_to_rgb",
+)
+
 
 def normalize_string(s: str, /) -> str:
     """

@@ -48,7 +48,8 @@ class MessagesCommands(commands.Cog):
         """
         await interaction.response.defer(ephemeral=True)
         if not interaction.guild:
-            raise app_commands.CheckFailure("This command can only be used in a guild.")
+            raise app_commands.CheckFailure(
+                "This command can only be used in a guild.")
 
         if not channel.permissions_for(interaction.guild.me).send_messages:
             raise app_commands.BotMissingPermissions(["send_messages"])
@@ -94,7 +95,8 @@ class MessagesCommands(commands.Cog):
         send a custom embed message to a channel
         """
         if not interaction.guild:
-            raise app_commands.CheckFailure("This command can only be used in a guild.")
+            raise app_commands.CheckFailure(
+                "This command can only be used in a guild.")
 
         if not channel.permissions_for(interaction.guild.me).send_messages:
             raise app_commands.BotMissingPermissions(["send_messages"])
@@ -158,7 +160,8 @@ class MessagesCommands(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         if not interaction.guild:
-            raise app_commands.CheckFailure("This command can only used in guild!")
+            raise app_commands.CheckFailure(
+                "This command can only used in guild!")
 
         if not channel.permissions_for(interaction.guild.me).send_messages:
             raise app_commands.BotMissingPermissions(["send_messages"])
@@ -225,7 +228,8 @@ class MessagesCommands(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         if not interaction.guild:
-            raise app_commands.CheckFailure("This command can only be used in a guild.")
+            raise app_commands.CheckFailure(
+                "This command can only be used in a guild.")
 
         if not channel.permissions_for(interaction.guild.me).send_messages:
             raise app_commands.BotMissingPermissions(["send_messages"])
@@ -237,10 +241,15 @@ class MessagesCommands(commands.Cog):
                 await interaction.followup.send(embed=errembed, ephemeral=True)
             if not data:
                 return
-        except json.JSONDecodeError as e:
-            raise RuntimeError(
-                "The JSON String is Invalid, Please try again with right format"
-            ) from e
+        except json.JSONDecodeError:
+            embed = discord.Embed(
+                description="The JSON String is Invalid, Please try again with right format",
+                color=discord.Color.red(),
+                timestamp=discord.utils.utcnow()
+            )
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            return
 
         embed = discord.Embed.from_dict(data)
         try:
@@ -275,7 +284,4 @@ class MessagesCommands(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    """
-    setup function for the cog
-    """
     await bot.add_cog(MessagesCommands(bot))

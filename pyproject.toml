@@ -33,4 +33,10 @@ dev = [
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-omit = ["**/*/tests/*", "**/*/venv/*", "**/*/env/*", "**/*/__init__.py"]
+omit = [
+  "**/tests/**/*",
+  "**/.venv/**/*",
+  "**/.env",
+  "**/.venv",
+  "**/__init__.py",
+]

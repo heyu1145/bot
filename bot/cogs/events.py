@@ -29,9 +29,9 @@ class EventsCog(commands.Cog):
 
         if len(interaction.guild.scheduled_events) == 0:
             errembed = discord.Embed(
-                title="Warning",
+                title="Info",
                 description="This server do not have any scheduled event",
-                color=discord.Color.red(),
+                color=discord.Color.blue(),
                 timestamp=discord.utils.utcnow(),
             )
             await interaction.followup.send(embed=errembed, ephemeral=True)

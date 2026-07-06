@@ -1,10 +1,12 @@
 """
 test for utils
 """
+import sys
+from types import FrameType
 import pytest
 from typing import Literal
 from discord import Embed
-from utils.utils import human_like_join, maybe_coro, multi_set_fields
+from utils.utils import human_like_join, frame_back_n, frame_get_parents, maybe_coro, multi_set_fields
 
 
 class TestJoin:
@@ -25,16 +27,16 @@ class TestJoin:
         assert human_like_join((a)) is a
 
     @pytest.mark.parametrize(
-            "iterable,excepted",
-            [
-                ([], ""),
-                ((), ""),
-                (set(), ""),
-                (["a"], "a"),
-                (["a", "b"], "a or b"),
-                (["a", "b", "c"], "a, b or c"),
-            ],
-            )
+        "iterable,excepted",
+        [
+            ([], ""),
+            ((), ""),
+            (set(), ""),
+            (["a"], "a"),
+            (["a", "b"], "a or b"),
+            (["a", "b", "c"], "a, b or c"),
+        ],
+    )
     def test_parametrize(self, iterable, excepted):
         assert human_like_join(iterable) == excepted
 
@@ -64,6 +66,7 @@ class TestCoro:
         assert await maybe_coro(lambda: 1) == 1
         assert await maybe_coro(lambda x: x, "a") == "a"
 
+
 class TestMultiSetFields:
     """test multi_set_fields"""
 
@@ -91,7 +94,7 @@ class TestMultiSetFields:
         assert f4.name == "e" and f4.value == "None"
         assert not all(f.inline for f in seted_embed.fields)
 
-    def unusual_multi_set_fields(self):
+    def test_unusual_multi_set_fields(self):
         fields = {
             "a": bytearray(b"hello"),
             "b": "hello",
@@ -101,11 +104,11 @@ class TestMultiSetFields:
             "f": frozenset({1, 2, 3}),
             "g": globals(),
             "h": (1, 2, 3),
-            "i": iter([1,2,3]),
+            "i": iter([1, 2, 3]),
             "j": lambda x: x,
             "k": {"key": "value"}.keys(),
-            "l": [1,2,3],
-            "m": map(lambda x: x, [1,2,3]),
+            "l": [1, 2, 3],
+            "m": map(lambda x: x, [1, 2, 3]),
             "n": next,
             "o": b"bytes",
             "p": self,
@@ -121,4 +124,60 @@ class TestMultiSetFields:
             "z": NotImplemented,
         }
         embed = Embed()
-        pytest.raises(ValueError, multi_set_fields, embed, False, True, False, **fields)
+        pytest.raises(ValueError, multi_set_fields,
+                      embed, False, True, False, **fields)
+
+
+class TestFrameGetParents:
+    """test frame_get_parents"""
+
+    def level3(self):
+        return sys._getframe(0)
+
+    def level2(self):
+        return self.level3()
+
+    def level1(self):
+        return self.level2()
+
+    def test_normal(self):
+        frame = self.level1()
+        result = frame_get_parents(frame)
+        assert len(result) >= 3
+        assert result[-1] == frame
+        assert result[-2].f_code.co_name == "level2"
+        assert result[-3].f_code.co_name == "level1"
+
+
+class TestFrameback_n:
+    """test frame_back_n"""
+
+    def level3(self):
+        return sys._getframe(0)
+
+    def level2(self):
+        return self.level3()
+
+    def level1(self):
+        return self.level2()
+
+    def test_normal(self):
+        frame = self.level1()
+        results: list[tuple[bool, int, FrameType]] = []
+        for i in range(1, 3):
+            results.append(frame_back_n(frame, i))
+
+        assert all(result[0] for result in results)
+
+        for i, (_, count, __) in enumerate(results):
+            assert count == i
+
+    def test_out_of_range(self):
+        frame = self.level1()
+        results: list[tuple[bool, int, FrameType]] = []
+        index: list[int] = [100000, 10000, 10000]
+        for i in index:
+            results.append(frame_back_n(frame, i))
+
+        for i, (success, *_) in enumerate(results):
+            assert not success

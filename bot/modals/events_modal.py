@@ -30,9 +30,12 @@ class DeleteEventSelect(BaseEventSelect):
         for index in selected:
             event = self.events[index]
             await event.cancel(reason=f"request by user {interaction.user.name}")
-            await interaction.followup.send(
-                f"event '{event.name}' cancelled", ephemeral=True
+            embed = discord.Embed(
+                description=f"event '{event.name}' cancelled",
+                color=discord.Color.blue(), timestamp=discord.utils.utcnow()
             )
+            embed.set_footer(text=f"request by {interaction.user.name}")
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 event_view_embed = discord.Embed(
