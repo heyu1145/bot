@@ -377,3 +377,12 @@ tmp.*
 
 # Emacs backup files
 *~
+
+# mypy reports
+linecount.txt
+
+# pytest reports
+coverage.md
+
+# reports dir
+reports/

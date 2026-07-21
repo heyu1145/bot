@@ -31,7 +31,7 @@ jobs:
           enable-cache: true
 
       - name: install dependencies
-        run: uv sync --frozen --extra dev
+        run: uv sync --frozen --dev
 
       - name: run pyright test
         run: uv run pyright .

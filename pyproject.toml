@@ -10,16 +10,17 @@ readme = "README.md"
 license = "MIT"
 
 dependencies = [
-  "discord.py>=2.7.0",
+  "discord-py>=2.7.0",
   "fastapi>=0.125.0",
   "python-dotenv>=1.1.0",
   "psutil>=7.0.0",
   "aiohttp>=3.13.0",
   "uvicorn>=0.34.0",
+  "packaging>=26.0",
 ]
 
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "mypy>=1.19.0",
   "pyright>=1.1.0",

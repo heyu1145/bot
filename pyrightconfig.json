@@ -3,4 +3,7 @@
     "reportUndefinedVariable": "error",
     "reportUnnecessaryTypeIgnoreComment": "information",
     "reportUnnecessaryCast": "information",
+    "reportUntypedNamedTuple": "information",
+    "reportDeprecated": "warning",
+    "reportSelfClsParameterName": "information"
 }
